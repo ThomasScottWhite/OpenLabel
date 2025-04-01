@@ -1,6 +1,15 @@
 import { useParams } from "react-router-dom";
-import { Container, Row, Col, Button, Card, ListGroup } from "react-bootstrap";
+import {
+  Container,
+  Row,
+  Col,
+  Button,
+  Card,
+  ListGroup,
+  ButtonGroup,
+} from "react-bootstrap";
 import { useEffect, useRef, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 const mockFiles = [
   "/images/sample1.jpg",
@@ -8,11 +17,15 @@ const mockFiles = [
   "/images/sample3.jpg",
 ];
 
+const LABELS = ["person", "car", "tree", "animal", "unknown"];
+
 interface RelativeBox {
-  x: number; // left (0-1)
-  y: number; // top (0-1)
+  id: string;
+  x: number;
+  y: number;
   width: number;
   height: number;
+  label: string;
 }
 
 const CANVAS_HEIGHT = 600;
@@ -27,6 +40,8 @@ const Annotator = () => {
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(
     null
   );
+  const [activeLabel, setActiveLabel] = useState("person");
+  const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
 
   const currentFile = mockFiles[currentIndex];
   const currentBoxes = annotations[currentIndex] || [];
@@ -77,7 +92,6 @@ const Annotator = () => {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Compute scale and offset
     const scale = Math.min(
       canvas.width / image.width,
       canvas.height / image.height
@@ -87,7 +101,6 @@ const Annotator = () => {
     const offsetX = (canvas.width - imgWidth) / 2;
     const offsetY = (canvas.height - imgHeight) / 2;
 
-    // Save draw info for reverse transforms
     setImageDrawData({
       x: offsetX,
       y: offsetY,
@@ -98,21 +111,27 @@ const Annotator = () => {
 
     ctx.drawImage(image, offsetX, offsetY, imgWidth, imgHeight);
 
-    // Draw boxes (relative -> absolute)
-    ctx.strokeStyle = "red";
-    ctx.lineWidth = 2;
     for (const box of currentBoxes) {
       const absX = offsetX + box.x * imgWidth;
       const absY = offsetY + box.y * imgHeight;
       const absW = box.width * imgWidth;
       const absH = box.height * imgHeight;
+
+      ctx.strokeStyle = box.id === selectedBoxId ? "cyan" : "red";
+      ctx.lineWidth = box.id === selectedBoxId ? 3 : 2;
       ctx.strokeRect(absX, absY, absW, absH);
+
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(absX, absY - 20, ctx.measureText(box.label).width + 10, 18);
+      ctx.fillStyle = "white";
+      ctx.font = "14px sans-serif";
+      ctx.fillText(box.label, absX + 5, absY - 6);
     }
   };
 
   useEffect(() => {
     drawCanvas();
-  }, [image, currentBoxes, canvasDims]);
+  }, [image, currentBoxes, canvasDims, selectedBoxId]);
 
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -123,8 +142,16 @@ const Annotator = () => {
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setStartPoint(getCanvasCoords(e));
+    const click = getCanvasCoords(e);
+    const found = findClickedBox(click.x, click.y);
+    if (found) {
+      setSelectedBoxId(found.id);
+      return;
+    }
+
+    setStartPoint(click);
     setDrawing(true);
+    setSelectedBoxId(null);
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -133,21 +160,22 @@ const Annotator = () => {
 
     const { x: offsetX, y: offsetY, width: imgW, height: imgH } = imageDrawData;
 
-    // Clamp inside canvas
     const relStartX = Math.min(Math.max(startPoint.x - offsetX, 0), imgW);
     const relStartY = Math.min(Math.max(startPoint.y - offsetY, 0), imgH);
     const relEndX = Math.min(Math.max(end.x - offsetX, 0), imgW);
     const relEndY = Math.min(Math.max(end.y - offsetY, 0), imgH);
 
-    const relBox: RelativeBox = {
+    const newBox: RelativeBox = {
+      id: uuidv4(),
       x: Math.min(relStartX, relEndX) / imgW,
       y: Math.min(relStartY, relEndY) / imgH,
       width: Math.abs(relEndX - relStartX) / imgW,
       height: Math.abs(relEndY - relStartY) / imgH,
+      label: activeLabel,
     };
 
     const updated = [...annotations];
-    updated[currentIndex] = [...(updated[currentIndex] || []), relBox];
+    updated[currentIndex] = [...(updated[currentIndex] || []), newBox];
     setAnnotations(updated);
     setStartPoint(null);
     setDrawing(false);
@@ -161,7 +189,6 @@ const Annotator = () => {
 
     drawCanvas();
 
-    // Preview blue box
     ctx.strokeStyle = "blue";
     ctx.lineWidth = 1;
     ctx.strokeRect(
@@ -172,17 +199,39 @@ const Annotator = () => {
     );
   };
 
-  const handleNext = () => {
-    if (currentIndex < mockFiles.length - 1) setCurrentIndex(currentIndex + 1);
+  const findClickedBox = (x: number, y: number): RelativeBox | null => {
+    if (!imageDrawData) return null;
+    const { x: offsetX, y: offsetY, width: imgW, height: imgH } = imageDrawData;
+
+    for (const box of currentBoxes) {
+      const absX = offsetX + box.x * imgW;
+      const absY = offsetY + box.y * imgH;
+      const absW = box.width * imgW;
+      const absH = box.height * imgH;
+      if (x >= absX && x <= absX + absW && y >= absY && y <= absY + absH) {
+        return box;
+      }
+    }
+    return null;
   };
 
-  const handlePrev = () => {
-    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
+  const handleLabelChange = (label: string) => {
+    setActiveLabel(label);
+
+    if (selectedBoxId) {
+      const updated = [...annotations];
+      const updatedBoxes = updated[currentIndex].map((box) =>
+        box.id === selectedBoxId ? { ...box, label } : box
+      );
+      updated[currentIndex] = updatedBoxes;
+      setAnnotations(updated);
+    }
   };
 
-  const handleFileSelect = (index: number) => {
-    setCurrentIndex(index);
-  };
+  const handleNext = () =>
+    setCurrentIndex((i) => Math.min(i + 1, mockFiles.length - 1));
+  const handlePrev = () => setCurrentIndex((i) => Math.max(i - 1, 0));
+  const handleFileSelect = (index: number) => setCurrentIndex(index);
 
   return (
     <Container fluid className="py-4">
@@ -251,6 +300,22 @@ const Annotator = () => {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
             />
+            <div className="mt-3">
+              <h6>Active Label:</h6>
+              <ButtonGroup>
+                {LABELS.map((label) => (
+                  <Button
+                    key={label}
+                    variant={
+                      activeLabel === label ? "primary" : "outline-primary"
+                    }
+                    onClick={() => handleLabelChange(label)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </ButtonGroup>
+            </div>
           </Card>
         </Col>
 
@@ -260,9 +325,9 @@ const Annotator = () => {
             <h5>Annotations</h5>
             <ul style={{ fontSize: "0.85rem" }}>
               {currentBoxes.map((box, i) => (
-                <li key={i}>
-                  Box #{i + 1} — x:{box.x.toFixed(2)} y:{box.y.toFixed(2)} w:
-                  {box.width.toFixed(2)} h:{box.height.toFixed(2)}
+                <li key={box.id}>
+                  <strong>{box.label}</strong> — x:{box.x.toFixed(2)} y:
+                  {box.y.toFixed(2)}
                 </li>
               ))}
             </ul>
