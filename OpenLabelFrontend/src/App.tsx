@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./app.css";
 
-import Annotator from "./Annotator.tsx";
 import Home from "./Home.tsx"; // A sample home page
 import NotFound from "./NotFound.tsx"; // A 404 Not Found page
 import Login from "./Login.tsx";
@@ -17,7 +16,6 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/annotator" element={<Annotator />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectPage />} />
         <Route path="*" element={<NotFound />} />

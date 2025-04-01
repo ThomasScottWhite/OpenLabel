@@ -1,137 +1,175 @@
-import React from "react";
 import { useParams } from "react-router-dom";
-import { Container, Row, Col, Dropdown, Button } from "react-bootstrap";
-import Table from "react-bootstrap/Table";
+import {
+  Container,
+  Button,
+  ProgressBar,
+  Card,
+  Row,
+  Col,
+  Form,
+  InputGroup,
+} from "react-bootstrap";
+import { useRef, useState } from "react";
 
-const ProjectPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+import ProjectFileTable from "./ProjectFileTable";
 
-  // For now, we will use a static list of projects
-  const inputs = [
-    {
-      id: "1",
-      name: "Image 1",
-      description: "Description for input one",
-    },
-    {
-      id: "2",
-      name: "Image 2",
-      description: "Description for input two",
-    },
-    {
-      id: "3",
-      name: "Image 3",
-      description: "Description for input three",
-    },
-  ];
-  const projects = [
-    {
-      id: "1",
-      name: "Project One",
-      description: "Description for project one",
-    },
-    {
-      id: "2",
-      name: "Project Two",
-      description: "Description for project two",
-    },
-    {
-      id: "3",
-      name: "Project Three",
-      description: "Description for project three",
-    },
-  ];
+const ProjectPage = () => {
+  const { id } = useParams();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const project = projects.find((p) => p.id === id);
+  const [files, setFiles] = useState([
+    {
+      name: "labels1.json",
+      size: 2056,
+      type: "JSON",
+      uploadedAt: "2025-04-01",
+    },
+    {
+      name: "image_001.jpg",
+      size: 512000,
+      type: "Image",
+      uploadedAt: "2025-04-01",
+    },
+  ]);
 
-  if (!project) {
-    return <div>Project not found</div>;
-  }
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filterColumn, setFilterColumn] = useState("size");
+  const [filterCondition, setFilterCondition] = useState(">");
+  const [filterValue, setFilterValue] = useState("");
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files;
+    if (!selected) return;
+
+    const newFiles = Array.from(selected).map((f) => ({
+      name: f.name,
+      size: f.size,
+      type: f.type || "Unknown",
+      uploadedAt: new Date().toISOString().split("T")[0],
+    }));
+
+    setFiles((prev) => [...prev, ...newFiles]);
+  };
+
+  const handleDeleteSelected = () => {
+    const selectedNames = selectedFiles.map((f) => f.name);
+    const updated = files.filter((f) => !selectedNames.includes(f.name));
+    setFiles(updated);
+    setSelectedFiles([]);
+  };
+
+  const handleDownloadSelected = () => {
+    alert(
+      `Pretending to download: ${selectedFiles.map((f) => f.name).join(", ")}`
+    );
+  };
+
+  const applyAdvancedFilter = (file) => {
+    if (filterColumn === "size") {
+      const sizeKB = file.size / 1024;
+      const filterNum = parseFloat(filterValue);
+      if (isNaN(filterNum)) return true;
+
+      switch (filterCondition) {
+        case ">":
+          return sizeKB > filterNum;
+        case "<":
+          return sizeKB < filterNum;
+        case "=":
+          return sizeKB === filterNum;
+        default:
+          return true;
+      }
+    } else if (filterColumn === "type") {
+      return file.type.toLowerCase().includes(filterValue.toLowerCase());
+    } else if (filterColumn === "name") {
+      return file.name.toLowerCase().includes(filterValue.toLowerCase());
+    }
+    return true;
+  };
+
+  const filteredFiles = files.filter(applyAdvancedFilter);
 
   return (
-    <Container className="mt-5 bg-secondary">
-      <h1>{project.name}</h1>
-      <p>{project.description}</p>
-      <Row>
-        <Col>
-          <Dropdown>
-            <Dropdown.Toggle variant="success" id="dropdown-basic">
-              Actions
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-              <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-              <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-        </Col>
-        <Col>
-          <Dropdown>
-            <Dropdown.Toggle variant="success" id="dropdown-basic">
-              Columns
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-              <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-              <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-        </Col>
-        <Col>
-          <Dropdown>
-            <Dropdown.Toggle variant="success" id="dropdown-basic">
-              Filters
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-              <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-              <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-        </Col>
-        <Col>
-          <Dropdown>
-            <Dropdown.Toggle variant="success" id="dropdown-basic">
-              Sort
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-              <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-              <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-          <Button>Label All Tasks</Button>
-        </Col>
-        <Col>
-          <Button>Export</Button>
-        </Col>
-        <Col>
-          <Button>Import</Button>
-        </Col>
-        <Col>
-          <Button>Refresh</Button>
-        </Col>
-      </Row>
-      <Row>
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inputs.map((input) => (
-              <tr key={input.id}>
-                <td>{input.id}</td>
-                <td>{input.name}</td>
-                <td>{input.description}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </Row>
+    <Container className="py-5">
+      <h1 className="mb-4">Project #{id}</h1>
+
+      <Card className="mb-4 p-3">
+        <h4>Project Overview</h4>
+        <p>Description or metadata here...</p>
+        <ProgressBar now={60} label={`60% Complete`} />
+      </Card>
+
+      {/* Action Bar */}
+      <div className="d-flex justify-content-between flex-wrap align-items-end gap-2 mb-3">
+        <div className="d-flex gap-2 flex-wrap align-items-end">
+          <Button
+            variant="outline-primary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload File
+          </Button>
+          <Button
+            variant="outline-danger"
+            disabled={selectedFiles.length === 0}
+            onClick={handleDeleteSelected}
+          >
+            Delete Selected
+          </Button>
+          <Button
+            variant="outline-secondary"
+            disabled={selectedFiles.length === 0}
+            onClick={handleDownloadSelected}
+          >
+            Download Selected
+          </Button>
+        </div>
+
+        {/* Advanced Filter */}
+        <InputGroup className="w-auto">
+          <Form.Select
+            value={filterColumn}
+            onChange={(e) => setFilterColumn(e.target.value)}
+          >
+            <option value="size">Size (KB)</option>
+            <option value="name">Name</option>
+            <option value="type">Type</option>
+          </Form.Select>
+          <Form.Select
+            value={filterCondition}
+            onChange={(e) => setFilterCondition(e.target.value)}
+          >
+            <option value=">">&gt;</option>
+            <option value="<">&lt;</option>
+            <option value="=">=</option>
+            <option value="contains">contains</option>
+          </Form.Select>
+          <Form.Control
+            placeholder="Filter value"
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+          />
+        </InputGroup>
+
+        <Button variant="success" href="/annotator">
+          Launch Annotator
+        </Button>
+      </div>
+
+      {/* Hidden File Input */}
+      <Form.Control
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        multiple
+        style={{ display: "none" }}
+      />
+
+      {/* File Table */}
+      <ProjectFileTable
+        files={filteredFiles}
+        onSelectionChange={setSelectedFiles}
+      />
     </Container>
   );
 };
