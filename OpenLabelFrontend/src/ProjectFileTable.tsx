@@ -2,13 +2,15 @@ import {
   useReactTable,
   getCoreRowModel,
   getFilteredRowModel,
-  flexRender,
   getSortedRowModel,
+  flexRender,
   ColumnDef,
+  SortingState,
   RowSelectionState,
 } from "@tanstack/react-table";
 import { useState } from "react";
 import { Table, Form, InputGroup } from "react-bootstrap";
+import { BsChevronDown, BsChevronUp } from "react-icons/bs";
 
 type FileItem = {
   name: string;
@@ -25,6 +27,7 @@ interface Props {
 const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const columns: ColumnDef<FileItem>[] = [
     {
@@ -47,31 +50,33 @@ const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
     {
       header: "Name",
       accessorKey: "name",
+      enableSorting: true,
     },
     {
       header: "Size",
       accessorKey: "size",
       cell: (info) => `${((info.getValue() as number) / 1024).toFixed(2)} KB`,
+      enableSorting: true,
     },
     {
       header: "Type",
       accessorKey: "type",
+      enableSorting: true,
     },
     {
       header: "Uploaded At",
       accessorKey: "uploadedAt",
+      enableSorting: true,
     },
   ];
 
   const table = useReactTable({
     data: files,
     columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     state: {
       globalFilter,
       rowSelection,
+      sorting,
     },
     onGlobalFilterChange: setGlobalFilter,
     onRowSelectionChange: (updater) => {
@@ -84,6 +89,10 @@ const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
       );
       onSelectionChange(selectedRows);
     },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     enableRowSelection: true,
   });
 
@@ -101,14 +110,32 @@ const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id}>
-                  {flexRender(
-                    header.column.columnDef.header,
-                    header.getContext()
-                  )}
-                </th>
-              ))}
+              {headerGroup.headers.map((header) => {
+                const isSortable = header.column.getCanSort();
+                const sortDirection = header.column.getIsSorted();
+                return (
+                  <th
+                    key={header.id}
+                    onClick={
+                      isSortable
+                        ? header.column.getToggleSortingHandler()
+                        : undefined
+                    }
+                    style={{ cursor: isSortable ? "pointer" : "default" }}
+                  >
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+                    {isSortable && (
+                      <span className="ms-1">
+                        {sortDirection === "asc" && <BsChevronUp />}
+                        {sortDirection === "desc" && <BsChevronDown />}
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           ))}
         </thead>
