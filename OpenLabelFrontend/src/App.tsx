@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./app.css";
 
 import Annotator from "./Annotator.tsx";
 import Home from "./Home.tsx"; // A sample home page
@@ -13,20 +14,15 @@ function App() {
 
   return (
     <Router>
-      <div className="mw-100 mh-100">
-        <div className="w-75 h-50 mx-auto">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/annotator" element={<Annotator />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:id" element={<ProjectPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </div>
-      </div>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/annotator" element={<Annotator />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
     </Router>
   );
 }
-
 export default App;

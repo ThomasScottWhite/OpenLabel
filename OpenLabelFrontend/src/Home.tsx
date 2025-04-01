@@ -1,17 +1,35 @@
-import { Container, Row, Col, Button } from 'react-bootstrap';
+import { Container, Row, Col, Button } from "react-bootstrap";
 import { Link } from "react-router-dom";
 
 const Home = () => {
   return (
-    <Container className="text-center mt-5">
+    <Container className="text-center min-vh-100 d-flex flex-column justify-content-center align-items-center text-dark">
+      <Row className="mb-4">
+        <Col>
+          <h1 className="display-3 fw-bold text-primary">OpenLabel</h1>
+          <p className="lead text-muted">
+            Open Source Local AI-Assisted Labeling Software.
+          </p>
+        </Col>
+      </Row>
       <Row>
         <Col>
-          <h1>Welcome to OpenLabel</h1>
-          <p>Your platform for managing projects efficiently.</p>
-          <Button color="primary" className="mr-2">Create Account</Button>
           <Link to="/login">
-          <Button color="secondary">Login</Button>
+            <Button
+              variant="primary"
+              size="lg"
+              className="me-3 rounded-pill px-4"
+            >
+              Login
+            </Button>
           </Link>
+          <Button
+            variant="outline-primary"
+            size="lg"
+            className="rounded-pill px-4"
+          >
+            Create Account
+          </Button>
         </Col>
       </Row>
     </Container>
