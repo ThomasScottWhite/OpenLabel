@@ -151,7 +151,7 @@ const ProjectPage = () => {
           />
         </InputGroup>
 
-        <Button variant="success" href="/annotator">
+        <Button variant="success" href={`/projects/${id}/annotator`}>
           Launch Annotator
         </Button>
       </div>

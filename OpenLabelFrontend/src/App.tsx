@@ -7,7 +7,7 @@ import NotFound from "./NotFound.tsx"; // A 404 Not Found page
 import Login from "./Login.tsx";
 import Projects from "./Projects.tsx";
 import ProjectPage from "./ProjectPage.tsx";
-
+import Annotator from "./Annotator.tsx";
 function App() {
   document.body.setAttribute("data-bs-theme", "dark");
 
@@ -18,6 +18,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="/projects/:id/annotator" element={<Annotator />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
