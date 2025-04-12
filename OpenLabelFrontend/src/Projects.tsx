@@ -1,18 +1,50 @@
-import { Card, Button, Row, Col, Container } from "react-bootstrap";
+import { useEffect, useState } from "react";
+import { Card, Button, Row, Col, Spinner, Container } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { BsTrash, BsGear } from "react-icons/bs";
 
-const projects = [
-  { id: 1, name: "Project One", description: "Description for project one" },
-  { id: 2, name: "Project Two", description: "Description for project two" },
-  {
-    id: 3,
-    name: "Project Three",
-    description: "Description for project three",
-  },
-];
+interface Project {
+  id: number;
+  name: string;
+  description: string;
+}
 
 const ProjectList = () => {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        const response = await fetch("http://localhost:8000/projects", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch projects");
+        }
+
+        const data = await response.json();
+        setProjects(data);
+      } catch (error) {
+        console.error("Error fetching projects:", error);
+        alert("Failed to load projects");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  if (loading) {
+    return <Spinner animation="border" />;
+  }
+
   return (
     <Row className="g-4">
       {projects.map((project) => (

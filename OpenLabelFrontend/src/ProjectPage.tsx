@@ -8,34 +8,60 @@ import {
   Col,
   Form,
   InputGroup,
+  Spinner,
+  Alert,
 } from "react-bootstrap";
-import { useRef, useState } from "react";
-
+import { useRef, useState, useEffect } from "react";
 import ProjectFileTable from "./ProjectFileTable";
+export interface ProjectFile {
+  id: number;
+  name: string;
+  description: string;
+  size: number;
+  type: string;
+  uploaded_at: string;
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  description: string;
+  type: string;
+  annotator_layout: string;
+  num_files: number;
+  num_annotated: number;
+  files: ProjectFile[];
+}
 
 const ProjectPage = () => {
   const { id } = useParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [files, setFiles] = useState([
-    {
-      name: "labels1.json",
-      size: 2056,
-      type: "JSON",
-      uploadedAt: "2025-04-01",
-    },
-    {
-      name: "image_001.jpg",
-      size: 512000,
-      type: "Image",
-      uploadedAt: "2025-04-01",
-    },
-  ]);
-
-  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [project, setProject] = useState<any>(null);
+  const [files, setFiles] = useState<any[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [filterColumn, setFilterColumn] = useState("size");
   const [filterCondition, setFilterCondition] = useState(">");
   const [filterValue, setFilterValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchProject = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/projects/${id}`);
+        if (!res.ok) throw new Error("Failed to fetch project");
+        const data = await res.json();
+        setProject(data);
+        setFiles(data.files || []);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProject();
+  }, [id]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files;
@@ -45,7 +71,7 @@ const ProjectPage = () => {
       name: f.name,
       size: f.size,
       type: f.type || "Unknown",
-      uploadedAt: new Date().toISOString().split("T")[0],
+      uploadedAt: new Date().toISOString(),
     }));
 
     setFiles((prev) => [...prev, ...newFiles]);
@@ -53,8 +79,7 @@ const ProjectPage = () => {
 
   const handleDeleteSelected = () => {
     const selectedNames = selectedFiles.map((f) => f.name);
-    const updated = files.filter((f) => !selectedNames.includes(f.name));
-    setFiles(updated);
+    setFiles(files.filter((f) => !selectedNames.includes(f.name)));
     setSelectedFiles([]);
   };
 
@@ -64,7 +89,7 @@ const ProjectPage = () => {
     );
   };
 
-  const applyAdvancedFilter = (file) => {
+  const applyAdvancedFilter = (file: any) => {
     if (filterColumn === "size") {
       const sizeKB = file.size / 1024;
       const filterNum = parseFloat(filterValue);
@@ -90,14 +115,33 @@ const ProjectPage = () => {
 
   const filteredFiles = files.filter(applyAdvancedFilter);
 
+  if (loading) {
+    return (
+      <Container className="py-5 text-center">
+        <Spinner animation="border" />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container className="py-5">
+        <Alert variant="danger">Error: {error}</Alert>
+      </Container>
+    );
+  }
+
   return (
     <Container className="py-5">
-      <h1 className="mb-4">Project #{id}</h1>
+      <h1 className="mb-4">{project.name}</h1>
 
       <Card className="mb-4 p-3">
         <h4>Project Overview</h4>
-        <p>Description or metadata here...</p>
-        <ProgressBar now={60} label={`60% Complete`} />
+        <p>{project.description}</p>
+        <ProgressBar
+          now={(project.num_annotated / project.num_files) * 100}
+          label={`${project.num_annotated}/${project.num_files} Annotated`}
+        />
       </Card>
 
       {/* Action Bar */}
@@ -142,7 +186,6 @@ const ProjectPage = () => {
             <option value=">">&gt;</option>
             <option value="<">&lt;</option>
             <option value="=">=</option>
-            <option value="contains">contains</option>
           </Form.Select>
           <Form.Control
             placeholder="Filter value"
