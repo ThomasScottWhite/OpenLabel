@@ -1,0 +1,1 @@
+conda env export --no-builds | findstr -v "^prefix: " > environment.yml
