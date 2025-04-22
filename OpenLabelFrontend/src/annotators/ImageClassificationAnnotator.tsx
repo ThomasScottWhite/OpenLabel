@@ -54,19 +54,6 @@ const ImageClassificationAnnotator = ({
           border: "1px solid #ccc",
         }}
       />
-      <div className="mt-3 d-flex flex-wrap justify-content-center gap-2">
-        {labelOptions.map((opt) => (
-          <button
-            key={opt}
-            className={`btn ${
-              opt === label ? "btn-primary" : "btn-outline-primary"
-            }`}
-            onClick={() => onLabelChange(opt)}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
     </div>
   );
 };

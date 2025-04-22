@@ -25,18 +25,6 @@ const TextClassificationAnnotator = ({
           {text}
         </p>
       </div>
-
-      <div className="d-flex flex-wrap justify-content-center gap-2">
-        {labelOptions.map((opt) => (
-          <Button
-            key={opt}
-            variant={opt === label ? "primary" : "outline-primary"}
-            onClick={() => onLabelChange(opt)}
-          >
-            {opt}
-          </Button>
-        ))}
-      </div>
     </div>
   );
 };
