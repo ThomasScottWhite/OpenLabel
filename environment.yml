@@ -23,6 +23,7 @@ dependencies:
   - pip:
       - annotated-types==0.7.0
       - anyio==4.9.0
+      - bcrypt==4.3.0
       - certifi==2025.1.31
       - cffi==1.17.1
       - click==8.1.8
@@ -48,6 +49,8 @@ dependencies:
       - pydantic-core==2.27.2
       - pydantic-settings==2.8.1
       - pygments==2.19.1
+      - pymongo==4.12.0
+      - python-dateutil==2.9.0.post0
       - python-dotenv==1.0.1
       - python-jose==3.4.0
       - python-multipart==0.0.20
