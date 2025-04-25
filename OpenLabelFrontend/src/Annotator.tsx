@@ -179,22 +179,57 @@ const Annotator = () => {
 
   // Handle box change for object detection
   // This is called when the user draws a new box or moves an existing one
-  const handleBoxChange = (updated: BoundingBox[]) => {
+  const handleBoxChange = async (updated: BoundingBox[]) => {
     const newAnnotations = [...annotations];
     newAnnotations[currentIndex] = updated;
     setAnnotations(newAnnotations);
+
+    if (!id || !files[currentIndex]) return;
+
+    try {
+      await fetch(
+        `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ annotations: updated }),
+        }
+      );
+    } catch (error) {
+      console.error("Failed to update annotations:", error);
+    }
   };
 
   // Handle label change for classification
   // This is called when the user selects a new label from the button group
-  const handleLabelChange = (label: string) => {
+  const handleLabelChange = async (label: string) => {
     setActiveLabel(label);
+
     if (layout?.layout === "object-detection" && selectedBoxId) {
       const updated = [...annotations];
       updated[currentIndex] = updated[currentIndex].map((box) =>
         box.id === selectedBoxId ? { ...box, label } : box
       );
       setAnnotations(updated);
+
+      if (!id || !files[currentIndex]) return;
+
+      try {
+        await fetch(
+          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ annotations: updated[currentIndex] }),
+          }
+        );
+      } catch (error) {
+        console.error("Failed to update label:", error);
+      }
     } else if (
       layout?.layout === "classification" &&
       layout?.type === "image"
@@ -202,10 +237,48 @@ const Annotator = () => {
       const updated = [...imageLabels];
       updated[currentIndex] = label;
       setImageLabels(updated);
+
+      if (!id || !files[currentIndex]) return;
+
+      try {
+        await fetch(
+          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              annotations: [{ annotator: "user@example.com", label }],
+            }),
+          }
+        );
+      } catch (error) {
+        console.error("Failed to update image classification label:", error);
+      }
     } else if (layout?.layout === "classification" && layout?.type === "text") {
       const updated = [...textLabels];
       updated[currentIndex] = label;
       setTextLabels(updated);
+
+      if (!id || !files[currentIndex]) return;
+
+      try {
+        await fetch(
+          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              annotations: [{ annotator: "user@example.com", label }],
+            }),
+          }
+        );
+      } catch (error) {
+        console.error("Failed to update text classification label:", error);
+      }
     }
   };
 
