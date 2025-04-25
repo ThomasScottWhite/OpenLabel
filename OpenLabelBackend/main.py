@@ -148,7 +148,6 @@ async def get_project_files(project_id: int):
 
 @app.get("/projects/{project_id}/files/{file_id}")
 async def get_project_file(project_id: int, file_id: int):
-
     file_mapping = {
         (1, 1): "./test_data/test_image1.png",
         (1, 2): "./test_data/test_image2.png",
@@ -161,11 +160,34 @@ async def get_project_file(project_id: int, file_id: int):
     file_path = file_mapping.get((project_id, file_id))
     if not file_path:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     file_bytes = Path(file_path).read_bytes()
     encoded_data = base64.b64encode(file_bytes).decode('utf-8')
 
     file_type = "image/png" if file_path.endswith(".png") else "text/plain" if file_path.endswith(".txt") else "video/mp4"
+
+    # Generate different fake annotations based on the project type
+    if project_id == 1:
+        # Text Classification
+        annotations = [
+            {"annotator": "user1@example.com", "label": "Positive"},
+            {"annotator": "user2@example.com", "label": "Negative"},
+        ]
+    elif project_id == 2:
+        # Image Classification
+        annotations = [
+            {"annotator": "user3@example.com", "label": "Cat"},
+            {"annotator": "user4@example.com", "label": "Dog"},
+        ]
+    elif project_id == 3:
+        # Object Detection
+        annotations = [
+            {"annotator": "user5@example.com", "label": "Car", "bbox": [.25, .25, .5, .5]},
+            {"annotator": "user6@example.com", "label": "Person", "bbox": [.25, .25, .5, .5]},
+        ]
+    else:
+        annotations = []
+
     return {
         "id": file_id,
         "name": f"File {file_id}",
@@ -174,6 +196,7 @@ async def get_project_file(project_id: int, file_id: int):
         "type": file_type,
         "uploaded_at": datetime.utcnow().isoformat() + "Z",
         "data": encoded_data,
+        "annotations": annotations,
     }
     
 

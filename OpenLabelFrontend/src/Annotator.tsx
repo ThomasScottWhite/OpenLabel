@@ -15,12 +15,15 @@ import ObjectDetectionAnnotator, {
 import ImageClassificationAnnotator from "./annotators/ImageClassificationAnnotator";
 import TextClassificationAnnotator from "./annotators/TextClassificationAnnotator";
 
+// This defines the structure of the annotator layout, and is fetched from the backend
 export interface AnnotatorLayout {
   type: "image" | "text" | "video";
   layout: "classification" | "object-detection" | "segmentation" | string;
   labels: string[];
 }
 
+// This defines the structure of the project file, and is fetched from the backend
+// This does not include the data, which is fetched separately
 export interface ProjectFile {
   id: number;
   name: string;
@@ -30,9 +33,26 @@ export interface ProjectFile {
   uploaded_at: string;
 }
 
+// Once the user selects a file, we fetch the data for that file
 export interface ProjectFileWithData extends ProjectFile {
   data: string;
 }
+
+// This defines the structure of the annotation, and is used for both classification and object detection
+interface BaseAnnotation {
+  annotator: string;
+  label: string;
+}
+// This defines the structure of the classification annotation
+// Honestly, this is a bit redundant, but it makes the code clearer
+interface ClassificationAnnotation extends BaseAnnotation {}
+
+// This defines the structure of the object detection annotation
+interface ObjectDetectionAnnotation extends BaseAnnotation {
+  bbox: [number, number, number, number];
+}
+
+type Annotation = ClassificationAnnotation | ObjectDetectionAnnotation;
 
 const CANVAS_HEIGHT = 600;
 
@@ -54,6 +74,7 @@ const Annotator = () => {
     height: CANVAS_HEIGHT,
   });
 
+  // Fetch the layout and files when the component mounts
   useEffect(() => {
     if (!id) return;
 
@@ -79,14 +100,16 @@ const Annotator = () => {
     fetchFiles();
   }, [id]);
 
+  // Fetch the file data when the current index changes
   useEffect(() => {
     if (!files[currentIndex] || !id) return;
+
     const fetchFileData = async () => {
       const fileId = files[currentIndex].id;
       const res = await fetch(
         `http://localhost:8000/projects/${id}/files/${fileId}`
       );
-      const data: ProjectFileWithData = await res.json();
+      const data = await res.json();
       setFileData(data);
 
       if (layout?.type === "image") {
@@ -94,10 +117,52 @@ const Annotator = () => {
         img.src = `data:${data.type};base64,${data.data}`;
         img.onload = () => setImage(img);
       }
-    };
-    fetchFileData();
-  }, [currentIndex, files, id, layout?.type]);
 
+      const annotationsFromServer: Annotation[] = data.annotations || [];
+
+      if (layout?.layout === "classification") {
+        if (layout.type === "text") {
+          // Text classification
+          setTextLabels((prev) => {
+            const newLabels = [...prev];
+            newLabels[currentIndex] =
+              annotationsFromServer[0]?.label || "unknown";
+            return newLabels;
+          });
+        } else if (layout.type === "image") {
+          // Image classification
+          setImageLabels((prev) => {
+            const newLabels = [...prev];
+            newLabels[currentIndex] =
+              annotationsFromServer[0]?.label || "unknown";
+            return newLabels;
+          });
+        }
+      } else if (layout?.layout === "object-detection") {
+        // Object detection
+        const boxes: BoundingBox[] = annotationsFromServer
+          .filter((ann) => "bbox" in ann)
+          .map((ann, idx) => ({
+            id: `box-${idx}`,
+            label: ann.label,
+            x: ann.bbox[0],
+            y: ann.bbox[1],
+            width: ann.bbox[2],
+            height: ann.bbox[3],
+          }));
+
+        setAnnotations((prev) => {
+          const newAnnotations = [...prev];
+          newAnnotations[currentIndex] = boxes;
+          return newAnnotations;
+        });
+      }
+    };
+
+    fetchFileData();
+  }, [currentIndex, files, id, layout]);
+
+  // Update the canvas size when the window is resized
   useEffect(() => {
     const updateCanvasSize = () => {
       if (canvasContainerRef.current) {
@@ -112,12 +177,16 @@ const Annotator = () => {
     return () => window.removeEventListener("resize", updateCanvasSize);
   }, []);
 
+  // Handle box change for object detection
+  // This is called when the user draws a new box or moves an existing one
   const handleBoxChange = (updated: BoundingBox[]) => {
     const newAnnotations = [...annotations];
     newAnnotations[currentIndex] = updated;
     setAnnotations(newAnnotations);
   };
 
+  // Handle label change for classification
+  // This is called when the user selects a new label from the button group
   const handleLabelChange = (label: string) => {
     setActiveLabel(label);
     if (layout?.layout === "object-detection" && selectedBoxId) {
@@ -140,6 +209,8 @@ const Annotator = () => {
     }
   };
 
+  // Handle delete for object detection
+  // This is called when the user clicks the delete button
   const handleDelete = () => {
     if (!selectedBoxId) return;
     const updated = [...annotations];
