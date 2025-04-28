@@ -148,7 +148,7 @@ class ProjectManager:
                     "members": {
                         "userId": user_id,
                         "roleId": role["_id"],
-                        "joinedAt": datetime.datetime.utcnow(),
+                        "joinedAt": datetime.datetime.now(datetime.timezone.utc),
                     }
                 }
             },

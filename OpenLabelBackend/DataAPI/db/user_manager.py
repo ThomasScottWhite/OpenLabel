@@ -44,9 +44,7 @@ class UserManager:
             "firstName": first_name,
             "lastName": last_name,
             "roleId": role["_id"],
-            "createdAt": datetime.datetime.now(
-                datetime.datetime.now(datetime.timezone.utc)
-            ),
+            "createdAt": datetime.datetime.now(datetime.timezone.utc),
             "lastLogin": None,
             "isActive": True,
         }
@@ -68,13 +66,7 @@ class UserManager:
             # Update last login time
             self.db.users.update_one(
                 {"_id": user["_id"]},
-                {
-                    "$set": {
-                        "lastLogin": datetime.datetime.now(
-                            datetime.datetime.now(datetime.timezone.utc)
-                        )
-                    }
-                },
+                {"$set": {"lastLogin": datetime.datetime.now(datetime.timezone.utc)}},
             )
             return user
         return None
