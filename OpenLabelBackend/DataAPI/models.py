@@ -50,6 +50,8 @@ class HasUpdatedAt(BaseModel):
 
 
 class HasCreatedBy(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     createdBy: ID
 
 
@@ -85,8 +87,6 @@ class Points(BaseModel):
 
 
 class Annotatation(HasCreatedBy, HasCreateAt, HasUpdatedAt):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     type: AnnotationType
     imageId: ID
     projectID: ID
@@ -110,6 +110,8 @@ class PolygonAnnotation(Annotatation):
 
 
 class ProjectMember(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     userID: ID
     roleID: ID
     joinedAt: datetime.datetime = Field(
@@ -133,21 +135,27 @@ class Project(HasCreatedBy, HasCreateAt, HasUpdatedAt):
 # USERS
 
 
-class User(HasCreateAt):
+class UserNoPassword(HasCreateAt):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     username: str
     email: str
-    password: bytes
     firstName: str
     lastName: str
-    roleID: ID
+    roleId: ID
     lastLogin: datetime.datetime | None = None
     isActive: bool
+
+
+class User(UserNoPassword):
+    password: bytes
 
 
 # IMAGES
 
 
 class ImageMeta(HasCreatedBy, HasCreateAt):
+
     projectID: ID
     width: int
     height: int
