@@ -20,4 +20,5 @@ class _Config(BaseSettings):
             self.mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/openlabel_db")
             self.database_name = os.getenv("DB_NAME", "openlabel_db")
 
+
 CONFIG: Final[_Config] = _Config()
