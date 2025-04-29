@@ -1,32 +1,44 @@
 {
-    "version": "0.2.0",
-    "compounds": [
-      {
-        "name": "Run Frontend + Backend",
-        "configurations": ["Frontend (npm run dev)", "Backend (python -m DataAPI)"],
-        "stopAll": true
-      }
-    ],
-    "configurations": [
-      {
-        "name": "Frontend (npm run dev)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder}/OpenLabelFrontend",  // <-- adjust if your frontend folder is elsewhere
-        "runtimeExecutable": "npm",
-        "runtimeArgs": ["run", "dev"],
-        "console": "integratedTerminal",
-        "internalConsoleOptions": "neverOpen"
-      },
-      {
-        "name": "Backend (python -m DataAPI)",
-        "type": "debugpy",
-        "cwd": "${workspaceFolder}/OpenLabelBackend",
-        "request": "launch",
-        "module": "DataAPI",
-        "console": "integratedTerminal",
-        "justMyCode": true
-      }
-    ]
-  }
-  
+  "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Run Frontend + Backend + MongoDB",
+      "configurations": [
+        "MongoDB (docker start openlabel_db)",
+        "Frontend (npm run dev)",
+        "Backend (python -m DataAPI)"
+      ],
+      "stopAll": true
+    }
+  ],
+  "configurations": [
+    {
+      "name": "MongoDB (docker start openlabel_db)",
+      "type": "pwa-node",
+      "request": "launch",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["start", "openlabel_db"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Frontend (npm run dev)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/OpenLabelFrontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Backend (python -m DataAPI)",
+      "type": "debugpy",
+      "cwd": "${workspaceFolder}/OpenLabelBackend",
+      "request": "launch",
+      "module": "DataAPI",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
