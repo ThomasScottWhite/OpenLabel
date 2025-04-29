@@ -5,6 +5,8 @@ from typing import Final
 
 from fastapi import APIRouter
 
+from DataAPI import db
+
 logger = logging.getLogger(__name__)
 
 _section_name: Final[str] = "projects"
@@ -13,6 +15,6 @@ _section_name: Final[str] = "projects"
 router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
 
 
-@router.get("/hello")
+@router.post("/hello")
 def hello() -> str:
     return "hello, world!"

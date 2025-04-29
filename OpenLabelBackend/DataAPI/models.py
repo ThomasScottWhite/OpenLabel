@@ -37,7 +37,7 @@ ID = Annotated[ObjectId, PlainSerializer(lambda x: str(x), return_type=str)]
 # SHARED PROPERTIES
 
 
-class HasCreateAt(BaseModel):
+class HasCreatedAt(BaseModel):
     createdAt: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
@@ -53,6 +53,24 @@ class HasCreatedBy(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     createdBy: ID
+
+
+class HasUserID(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    userId: ID
+
+
+class HasUserIDAuto(HasUserID):
+    """Same as HasUserID, but automatically populates the field from '_id'"""
+
+    userId: ID = Field(validation_alias="_id")
+
+
+class HasRoleID(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    roleId: ID
 
 
 # ROLES
@@ -86,7 +104,7 @@ class Points(BaseModel):
     points: list[Point]
 
 
-class Annotatation(HasCreatedBy, HasCreateAt, HasUpdatedAt):
+class Annotatation(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
     type: AnnotationType
     imageId: ID
     projectID: ID
@@ -109,11 +127,8 @@ class PolygonAnnotation(Annotatation):
 # PROJECTS
 
 
-class ProjectMember(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class ProjectMember(HasUserID, HasRoleID):
 
-    userID: ID
-    roleID: ID
     joinedAt: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
@@ -125,7 +140,7 @@ class ProjectSettings(BaseModel):
     isPublic: bool = False
 
 
-class Project(HasCreatedBy, HasCreateAt, HasUpdatedAt):
+class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
     name: str
     description: str
     members: list[ProjectMember]
@@ -135,28 +150,58 @@ class Project(HasCreatedBy, HasCreateAt, HasUpdatedAt):
 # USERS
 
 
-class UserNoPassword(HasCreateAt):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class UserNoPassword(HasCreatedAt, HasRoleID):
 
     username: str
     email: str
     firstName: str
     lastName: str
-    roleId: ID
     lastLogin: datetime.datetime | None = None
     isActive: bool
+
+
+class UserNoPasswordWithID(UserNoPassword, HasUserIDAuto):
+    pass
 
 
 class User(UserNoPassword):
     password: bytes
 
 
+class UserWithID(User, HasUserIDAuto):
+    pass
+
+
+# PREFERENCES
+
+
+class KeyboardShortcuts(BaseModel):
+    # TODO: validate keyboard shortcuts??
+    createBox: str = "b"
+    createPolygon: str = "p"
+    deleteAnnotation: str = "d"
+    saveAnnotation: str = "ctrl+s"
+    nextImage: str = "right"
+    prevImage: str = "left"
+
+
+class UIPreferences(BaseModel):
+    theme: str = "light"
+    language: str = "en"
+    annotationDefaultColor: str = "#FF0000"
+
+
+class UserPreferences(HasUserID):
+    keyboardShortcuts: KeyboardShortcuts
+    uiPreferences: UIPreferences
+
+
 # IMAGES
 
 
-class ImageMeta(HasCreatedBy, HasCreateAt):
+class ImageMeta(HasCreatedBy, HasCreatedAt):
 
-    projectID: ID
+    projectId: ID
     width: int
     height: int
     exif: dict
