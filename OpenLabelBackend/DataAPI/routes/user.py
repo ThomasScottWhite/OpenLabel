@@ -46,13 +46,6 @@ def create_user(request: CreateUserRequest) -> str:
     return str(created_id)
 
 
-@router.get("")
-def get_users(limit: int = 100) -> list[models.UserNoPasswordWithID]:
-
-    users = db.user.get_users(limit)
-    print(users)
-
-    return users
 
 
 class LoginRequest(BaseModel):
@@ -73,42 +66,60 @@ def get_user_by_id(data: LoginRequest) -> models.UserNoPasswordWithID:
 
     return token
 
+# @router.get("/protected")
+# def protected_route(current_user: dict = Depends(auth_user)):
+#     return {"message": "Access granted", "user_id": current_user["user_id"]}
 
-@router.get("/{user_id}")
-def get_user_by_id(user_id: str) -> models.UserNoPasswordWithID:
+from fastapi import APIRouter, Depends
+from DataAPI.auth_utils import auth_user
 
-    user = db.user.get_user_by_id(ObjectId(user_id))
+# Im not sure if we even want this
+@router.get("/get_user_information")
+def get_user_by_id(current_user: dict = Depends(auth_user)) -> models.UserNoPasswordWithID: 
+    current_user_id = current_user["user_id"]
+    user = db.user.get_user_by_id(ObjectId(current_user_id))
 
     return user
 
+# Im also not sure if we want this
+@router.get("")
+def get_users(limit: int = 100) -> list[models.UserNoPasswordWithID]:
 
-@router.put("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def update_user_by_id(user_id: str, data: dict):
-    # TODO: need to authenticate user here to ensure update permission
+    users = db.user.get_users(limit)
+    print(users)
 
-    # don't do anything if no data is passed
+    return users
+
+
+@router.put("/update_user_id", status_code=status.HTTP_204_NO_CONTENT)
+def update_user_by_id(data: dict, current_user: dict = Depends(auth_user)):
+
+    current_user_id = current_user["user_id"]
     if not data:
         return
 
     try:
-        db.user.update_user(ObjectId(user_id), data)
+        db.user.update_user(ObjectId(current_user_id), data)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception:
         raise
 
 
-@router.get("/{user_id}/preferences")
-def get_user_preferences(user_id: str) -> models.UserPreferences:
+@router.get("/user_preferences")
+def get_user_preferences(current_user: dict = Depends(auth_user)) -> models.UserPreferences:
 
+    user_id = current_user["user_id"]
     user = db.user.get_user_preferences(ObjectId(user_id))
 
     return user
 
 
-@router.put("/{user_id}/preferences", status_code=status.HTTP_204_NO_CONTENT)
-def update_user_preferences(user_id: str, data: dict):
+@router.put("/update_user_preferences", status_code=status.HTTP_204_NO_CONTENT)
+def update_user_preferences(data, current_user: dict = Depends(auth_user)):
 
+    
+    user_id = current_user["user_id"]
     try:
         db.user.update_user_preferences(ObjectId(user_id), data)
     except ValueError as e:
