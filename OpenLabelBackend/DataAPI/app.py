@@ -8,8 +8,15 @@ from fastapi import FastAPI
 
 from DataAPI.routes import ROUTERS
 
-logger = logging.getLogger(__name__)
 
+from rich.logging import RichHandler
+
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

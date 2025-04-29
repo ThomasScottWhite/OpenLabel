@@ -1,21 +1,17 @@
-import logging
 
-from rich.logging import RichHandler
-
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
-
-logger = logging.getLogger(__name__)
-
-import uvicorn
-
-from DataAPI.app import APP
 from DataAPI.config import CONFIG
 
 # note: if you want to modify config before initializing the app object, do so
 #       before importing APP
 
 
-uvicorn.run(APP, host="127.0.0.1", port=CONFIG.port)
+if __name__ == "__main__":
+    import subprocess
+
+    subprocess.run([
+        "uvicorn", "DataAPI.app:APP",
+        "--host", "127.0.0.1",
+        "--port", str(CONFIG.port),
+        "--reload"
+    ])
+
