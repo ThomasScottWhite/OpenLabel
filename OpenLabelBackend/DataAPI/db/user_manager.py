@@ -4,7 +4,7 @@ import bcrypt
 from bson.objectid import ObjectId
 
 from .. import models
-from OpenLabelBackend.DataAPI.auth_utils import generate_token
+from DataAPI.auth_utils import generate_token
 
 class UserManager:
     """User management for OpenLabel"""
