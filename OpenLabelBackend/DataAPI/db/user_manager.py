@@ -4,7 +4,7 @@ import bcrypt
 from bson.objectid import ObjectId
 
 from .. import models
-
+from OpenLabelBackend.DataAPI.auth_utils import generate_token
 
 class UserManager:
     """User management for OpenLabel"""
@@ -85,29 +85,26 @@ class UserManager:
 
         return result.inserted_id
 
-    def authenticate_user(self, username: str, password: str) -> dict | None:
-        """Authenticates the user (effectively logs them in).
-
-        Args:
-            username: The username of the user to log in.
-            password: The user's password.
-
-        Returns:
-            The user if the credentials matched, else `None`.
-        """
-        # TODO: move to auth, probably
+    def login(self, username: str, password: str) -> dict | None:
+        """Authenticates the user and returns an auth token if successful."""
         user = self.db.users.find_one({"username": username})
         if not user:
             return None
 
         if bcrypt.checkpw(password.encode("utf-8"), user["password"]):
-            # Update last login time
             self.db.users.update_one(
                 {"_id": user["_id"]},
                 {"$set": {"lastLogin": datetime.datetime.now(datetime.timezone.utc)}},
             )
-            return user
+            token = generate_token(user["_id"])
+            return token
+            # return {
+            #     "token": token,
+            #     "user_id": str(user["_id"]),
+            #     "username": user["username"]
+            # }
         return None
+
 
     def get_user_by_id(self, user_id: ObjectId) -> dict | None:
         """Returns a single user object matching the provided ID, or `None` if the user does not exist

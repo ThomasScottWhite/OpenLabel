@@ -63,16 +63,15 @@ class LoginRequest(BaseModel):
 @router.post("/login")
 def get_user_by_id(data: LoginRequest) -> models.UserNoPasswordWithID:
 
-    user = db.user.authenticate_user(data.username, data.password)
+    token = db.user.login(data.username, data.password)
 
-    if user is None:
+    if token is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Provided username and/or password was invalid.",
         )
 
-    # TODO: would return auth code or something instead of user
-    return user
+    return token
 
 
 @router.get("/{user_id}")
