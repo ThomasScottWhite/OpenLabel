@@ -123,7 +123,8 @@ class PolygonAnnotation(Annotatation):
     type: Literal[AnnotationType.POLYGON] = AnnotationType.POLYGON
     coordinates: Points
 
-
+class TokenOnlyResponse(BaseModel):
+    token: str
 # PROJECTS
 
 

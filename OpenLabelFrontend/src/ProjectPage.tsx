@@ -49,7 +49,7 @@ const ProjectPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/projects/${id}`);
+        const res = await fetch(`/api/projects/${id}`);
         if (!res.ok) throw new Error("Failed to fetch project");
         const data = await res.json();
         setProject(data);

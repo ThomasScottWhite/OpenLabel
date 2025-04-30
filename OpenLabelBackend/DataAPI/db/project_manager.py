@@ -10,14 +10,22 @@ class ProjectManager:
     def __init__(self, db_manager):
         """Initialize with database manager"""
         self.db = db_manager.db
+        self.initalize_default_projects()
 
+    # Current supported annotation types
+    # export interface AnnotatorLayout {
+    #   type: "image" | "text" ;
+    #   layout: "classification" | "object-detection"| string;
+    #   labels: string[];
+    # }
     def create_project(
         self,
         name: str,
         description: str,
+        data_type: str,
+        annotation_type: str,
         created_by: ObjectId,
         is_public: bool = False,
-        annotation_types: List[str] = None,
     ) -> ObjectId:
         """Create a new project"""
         # Check if project name already exists for this user
@@ -26,8 +34,6 @@ class ProjectManager:
         if existing:
             raise ValueError(f"Project '{name}' already exists for this user")
 
-        if annotation_types is None:
-            annotation_types = ["boundingBox", "polygon"]
 
         project_doc = {
             "name": name,
@@ -44,8 +50,8 @@ class ProjectManager:
                 }
             ],
             "settings": {
-                "exportFormat": "COCO",  # Default format
-                "annotationTypes": annotation_types,
+                "data_type": data_type,
+                "annotation_type": annotation_type,
                 "isPublic": is_public,
             },
         }
@@ -179,3 +185,50 @@ class ProjectManager:
                 )
 
         return members
+
+    def get_all_projects(self) -> List[Dict]:
+        """Get all projects"""
+        return list(self.db.projects.find())
+    
+    def initalize_default_projects(self):
+        """Initialize default projects"""
+
+        default_admin = self.db.users.find_one({"username": "admin"})
+        if not default_admin:
+            raise ValueError("Admin user not found")
+        
+        admin_id = default_admin["_id"]
+        try:
+            self.create_project(
+                name="Default Project 1",
+                description="This is a default project for image object-detection.",
+                created_by=admin_id, 
+                is_public=True,
+                data_type="image",
+                annotation_type="object-detection",
+            )
+        except:
+            pass
+        try:
+            self.create_project(
+                name="Default Project 2",
+                description="This is a default project for text classification.",
+                created_by=admin_id, 
+                is_public=True,
+                data_type="text",
+                annotation_type="classification",
+            )
+        except:
+            pass
+        try:
+            self.create_project(
+                name="Default Project 3",
+                description="This is a default project for image classification.",
+                created_by=admin_id,  
+                is_public=True,
+                data_type="image",
+                annotation_type="classification",
+            )
+        except:
+            pass
+

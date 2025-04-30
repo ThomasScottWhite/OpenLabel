@@ -3,7 +3,7 @@ import { Container, Row, Col, Form, Button, Card } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
-  const [email, setEmail] = useState("");
+  const [username, setUserName] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
@@ -11,14 +11,15 @@ const Login = () => {
     e.preventDefault();
 
     try {
-      const response = await fetch("http://localhost:8000/auth/token", {
+      const response = await fetch("/api/user/login", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          username: email,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username,
           password: password,
         }),
       });
+
       console.log("Raw response text:", response);
 
       if (!response.ok) {
@@ -45,10 +46,10 @@ const Login = () => {
                 <Form.Group controlId="formBasicEmail" className="mb-3">
                   <Form.Label>Email address</Form.Label>
                   <Form.Control
-                    type="email"
-                    placeholder="Enter email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="username"
+                    placeholder="Enter Username"
+                    value={username}
+                    onChange={(e) => setUserName(e.target.value)}
                     required
                   />
                 </Form.Group>

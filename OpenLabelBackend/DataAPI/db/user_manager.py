@@ -6,13 +6,21 @@ from bson.objectid import ObjectId
 from .. import models
 from DataAPI.auth_utils import generate_token
 
+import os
+DEFAULT_ADMIN = {
+    "username": "admin",
+    "email": "admin@admin.com",
+    "password": "admin",
+}
+
+
 class UserManager:
     """User management for OpenLabel"""
 
     def __init__(self, db_manager):
         """Initialize with database manager"""
         self.db = db_manager.db
-
+        self.initalize_default_admin_user()
     def _get_role_id_by_name(self, role_name: str) -> ObjectId | None:
         """Returns the ID of the role with name `role_name` if it exists, else `None`
 
@@ -97,6 +105,7 @@ class UserManager:
                 {"$set": {"lastLogin": datetime.datetime.now(datetime.timezone.utc)}},
             )
             token = generate_token(user["_id"])
+            print(token)
             return token
             # return {
             #     "token": token,
@@ -256,3 +265,17 @@ class UserManager:
 
         result = self.db.userPreferences.update_one({"userId": user_id}, {"$set": old})
         return result.modified_count > 0
+
+
+    def initalize_default_admin_user(self):
+        """Creates a default admin user if it does not exist"""
+        existing_user = self.db.users.find_one({"username": "admin"})
+        if not existing_user:
+            self.create_user(
+                DEFAULT_ADMIN["username"],
+                DEFAULT_ADMIN["email"],
+                DEFAULT_ADMIN["password"],
+                "Admin",
+                "User",
+                role_name="admin",
+            )

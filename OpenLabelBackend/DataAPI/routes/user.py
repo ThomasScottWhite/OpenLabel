@@ -54,7 +54,7 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login")
-def get_user_by_id(data: LoginRequest) -> models.UserNoPasswordWithID:
+def get_user_by_id(data: LoginRequest) -> models.TokenOnlyResponse:
 
     token = db.user.login(data.username, data.password)
 
@@ -64,7 +64,7 @@ def get_user_by_id(data: LoginRequest) -> models.UserNoPasswordWithID:
             "Provided username and/or password was invalid.",
         )
 
-    return token
+    return {"token" : token}
 
 # @router.get("/protected")
 # def protected_route(current_user: dict = Depends(auth_user)):

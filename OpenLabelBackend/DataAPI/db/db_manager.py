@@ -4,7 +4,7 @@ import logging
 
 import pymongo
 from pymongo import MongoClient
-
+import os
 from DataAPI.models import CRUD, Permission, Role
 
 ROLES = [
@@ -63,7 +63,6 @@ ROLES = [
         description="Reviewer with annotation review capabilities",
     ),
 ]
-
 
 class MongoDBManager:
     """MongoDB database manager for OpenLabel"""

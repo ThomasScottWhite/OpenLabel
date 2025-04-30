@@ -79,16 +79,14 @@ const Annotator = () => {
     if (!id) return;
 
     const fetchLayout = async () => {
-      const res = await fetch(
-        `http://localhost:8000/projects/${id}/annotator_layout`
-      );
+      const res = await fetch(`/api/projects/${id}/annotator_layout`);
       const data: AnnotatorLayout = await res.json();
       setLayout(data);
       setActiveLabel(data.labels[0] || "");
     };
 
     const fetchFiles = async () => {
-      const res = await fetch(`http://localhost:8000/projects/${id}/files`);
+      const res = await fetch(`/api/projects/${id}/files`);
       const data: ProjectFile[] = await res.json();
       setFiles(data);
       setAnnotations(Array(data.length).fill([]));
@@ -106,9 +104,7 @@ const Annotator = () => {
 
     const fetchFileData = async () => {
       const fileId = files[currentIndex].id;
-      const res = await fetch(
-        `http://localhost:8000/projects/${id}/files/${fileId}`
-      );
+      const res = await fetch(`/api/projects/${id}/files/${fileId}`);
       const data = await res.json();
       setFileData(data);
 
@@ -188,7 +184,7 @@ const Annotator = () => {
 
     try {
       await fetch(
-        `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+        `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
         {
           method: "POST",
           headers: {
@@ -218,7 +214,7 @@ const Annotator = () => {
 
       try {
         await fetch(
-          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
           {
             method: "POST",
             headers: {
@@ -242,7 +238,7 @@ const Annotator = () => {
 
       try {
         await fetch(
-          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
           {
             method: "POST",
             headers: {
@@ -265,7 +261,7 @@ const Annotator = () => {
 
       try {
         await fetch(
-          `http://localhost:8000/projects/${id}/files/${files[currentIndex].id}/annotations`,
+          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
           {
             method: "POST",
             headers: {
