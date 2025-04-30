@@ -23,13 +23,15 @@ const Home = () => {
               Login
             </Button>
           </Link>
-          <Button
-            variant="outline-primary"
-            size="lg"
-            className="rounded-pill px-4"
-          >
-            Create Account
-          </Button>
+          <Link to="/create-account">
+            <Button
+              variant="outline-primary"
+              size="lg"
+              className="rounded-pill px-4"
+            >
+              Create Account
+            </Button>
+          </Link>
         </Col>
       </Row>
     </Container>

@@ -4,6 +4,7 @@ import bcrypt
 from bson.objectid import ObjectId
 
 from .. import models
+from ..exceptions import UserAlreadyExists, EmailAlreadyExists, RoleNotFound
 from DataAPI.auth_utils import generate_token
 
 import os
@@ -63,15 +64,14 @@ class UserManager:
         # TODO: consider making custom errors for better communication with routes
         # Check if username or email already exists
         if self.db.users.find_one({"username": username}):
-            raise ValueError(f"Username '{username}' already exists")
+            raise UserAlreadyExists(f"Username '{username}' already exists")
 
         if self.db.users.find_one({"email": email}):
-            raise ValueError(f"Email '{email}' already exists")
+            raise EmailAlreadyExists(f"Email '{email}' already exists")
 
-        # Get role ID
         role_id = self._get_role_id_by_name(role_name)
         if role_id is None:
-            raise ValueError(f"Role '{role_name}' does not exist")
+            raise RoleNotFound(f"Role '{role_name}' does not exist")
 
         # Hash the password
         hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
@@ -88,10 +88,9 @@ class UserManager:
 
         result = self.db.users.insert_one(dict(user))
 
-        # Create default user preferences
         self.create_default_preferences(result.inserted_id)
 
-        return result.inserted_id
+        return self.login(username, password)
 
     def login(self, username: str, password: str) -> dict | None:
         """Authenticates the user and returns an auth token if successful."""
@@ -218,7 +217,7 @@ class UserManager:
         for key in ("keyboardShortcuts", "uiPreferences"):
             preferences[key] = dict(preferences[key])
 
-        result = self.db.userPreferences.insert_one()
+        result = self.db.userPreferences.insert_one(preferences)
         return result.inserted_id
 
     def get_user_preferences(self, user_id: ObjectId) -> dict | None:

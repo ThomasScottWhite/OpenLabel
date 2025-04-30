@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import { Container, Row, Col, Form, Button, Card } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 
+interface LoginResponse {
+  token: string;
+}
+
 const Login = () => {
   const [username, setUserName] = useState("");
   const [password, setPassword] = useState("");
@@ -26,8 +30,8 @@ const Login = () => {
         throw new Error("Login failed");
       }
 
-      const data = await response.json();
-      localStorage.setItem("token", data.access_token);
+      const data: LoginResponse = await response.json();
+      localStorage.setItem("token", data.token);
       navigate("/projects");
     } catch (error) {
       console.error("Login error:", error);

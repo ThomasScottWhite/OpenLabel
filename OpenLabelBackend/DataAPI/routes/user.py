@@ -12,7 +12,9 @@ from .. import db, models
 logger = logging.getLogger(__name__)
 
 _section_name: Final[str] = "user"
-
+from fastapi import APIRouter, Depends
+from DataAPI.auth_utils import auth_user
+from ..exceptions import UserAlreadyExists, EmailAlreadyExists, RoleNotFound
 # Do not change the name of "router"!
 router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
 
@@ -27,10 +29,10 @@ class CreateUserRequest(BaseModel):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_user(request: CreateUserRequest) -> str:
+def create_user(request: CreateUserRequest) -> models.TokenOnlyResponse:
 
     try:
-        created_id = db.user.create_user(
+        token = db.user.create_user(
             request.username,
             request.email,
             request.password,
@@ -38,12 +40,29 @@ def create_user(request: CreateUserRequest) -> str:
             request.last_name,
             request.role_name,
         )
+    except UserAlreadyExists:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Provided username already exists.",
+        )
+    except EmailAlreadyExists:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Provided email already exists.",
+        )
+    except RoleNotFound:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Provided role does not exist.",
+        )
     except ValueError as e:
+        print(f"[DEBUG] ValueError: {e}")
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
     except Exception:
         raise
 
-    return str(created_id)
+    return {"token" : token}
 
 
 
@@ -70,8 +89,7 @@ def get_user_by_id(data: LoginRequest) -> models.TokenOnlyResponse:
 # def protected_route(current_user: dict = Depends(auth_user)):
 #     return {"message": "Access granted", "user_id": current_user["user_id"]}
 
-from fastapi import APIRouter, Depends
-from DataAPI.auth_utils import auth_user
+
 
 # Im not sure if we even want this
 @router.get("/get_user_information")

@@ -3,10 +3,26 @@ import { Card, Button, Row, Col, Spinner, Container } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { BsTrash, BsGear } from "react-icons/bs";
 
+interface ProjectSettings {
+  data_type: "image" | "text";
+  annotation_type: "object-detection" | "classification";
+  isPublic: boolean;
+}
+
+interface ProjectMember {
+  userId: string;
+  joinedAt: string;
+}
+
 interface Project {
-  id: number;
+  _id: string;
   name: string;
   description: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  members: ProjectMember[];
+  settings: ProjectSettings;
 }
 
 const ProjectList = () => {
@@ -18,7 +34,7 @@ const ProjectList = () => {
       try {
         const token = localStorage.getItem("token");
 
-        const response = await fetch("/api/project/projects", {
+        const response = await fetch("/api/projects/projects", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -29,7 +45,7 @@ const ProjectList = () => {
         }
 
         const data = await response.json();
-        setProjects(data);
+        setProjects(data.projects); // assuming response is { projects: [...] }
       } catch (error) {
         console.error("Error fetching projects:", error);
         alert("Failed to load projects");
@@ -48,7 +64,7 @@ const ProjectList = () => {
   return (
     <Row className="g-4">
       {projects.map((project) => (
-        <Col key={project.id} xs={12} md={6} lg={4}>
+        <Col key={project._id} xs={12} md={6} lg={4}>
           <Card className="h-100 shadow-sm border-0 rounded-4">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start mb-2">
@@ -59,6 +75,13 @@ const ProjectList = () => {
                     style={{ fontSize: "0.9rem" }}
                   >
                     {project.description}
+                  </Card.Text>
+                  <Card.Text
+                    className="text-muted"
+                    style={{ fontSize: "0.8rem" }}
+                  >
+                    {project.settings.data_type} /{" "}
+                    {project.settings.annotation_type}
                   </Card.Text>
                 </div>
                 <Button
@@ -72,7 +95,7 @@ const ProjectList = () => {
               </div>
               <div className="d-flex gap-2 mt-3">
                 <Link
-                  to={`/projects/${project.id}`}
+                  to={`/projects/${project._id}`}
                   className="btn btn-primary btn-sm w-100"
                 >
                   Open

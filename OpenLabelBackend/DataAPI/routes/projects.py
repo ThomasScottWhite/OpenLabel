@@ -8,6 +8,8 @@ from fastapi import APIRouter
 from DataAPI import db
 from pydantic import BaseModel
 from .. import models
+from fastapi import APIRouter, Depends
+from DataAPI.auth_utils import auth_user
 logger = logging.getLogger(__name__)
 
 _section_name: Final[str] = "projects"
@@ -23,8 +25,8 @@ def hello() -> str:
 class Project(BaseModel):
     token: str
 
-@router.post("/projects")
-def view_projects() -> dict:
+@router.get("/projects")
+def view_projects(current_user: dict = Depends(auth_user)) -> dict:
     """View all projects"""
     try:
         projects = db.project.get_all_projects()
@@ -41,5 +43,5 @@ def view_projects() -> dict:
         project["updatedAt"] = str(project["updatedAt"])
         project["createdAt"] = str(project["createdAt"])
         project["members"] = [{"userId": str(member["userId"]), "joinedAt": str(member["joinedAt"])} for member in project["members"]]
-        
+
     return {"projects": projects}
