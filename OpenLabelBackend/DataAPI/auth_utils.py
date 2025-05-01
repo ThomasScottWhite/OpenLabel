@@ -1,35 +1,46 @@
-import jwt
 import datetime
-from fastapi import HTTPException, status, Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-SECRET_KEY = "mynamejeff" 
+from . import models
+
+SECRET_KEY = "mynamejeff"
 ALGORITHM = "HS256"
 
+
 def generate_token(user_id: str) -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
     payload = {
-        "user_id": str(user_id),
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
-        "iat": datetime.datetime.utcnow()
+        "userId": str(user_id),
+        "exp": now + datetime.timedelta(hours=1),
+        "iat": now,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> models.TokenPayload:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
+        return models.TokenPayload(**payload)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired."
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token."
+        )
 
-def auth_user(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())) -> dict:
+
+def auth_user(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+) -> models.TokenPayload:
     token = credentials.credentials
     payload = decode_token(token)
     return payload
+
 
 # Example Usage
 # from fastapi import APIRouter, Depends

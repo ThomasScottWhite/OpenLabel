@@ -1,11 +1,10 @@
 import datetime
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from bson.objectid import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
-
-# put pydantic models here
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PlainSerializer
+from pydantic_core import core_schema
 
 
 class CRUD(str, Enum):
@@ -31,7 +30,25 @@ class ExportFormat(str, Enum):
     ONNX = "ONNX"
 
 
-ID = Annotated[ObjectId, PlainSerializer(lambda x: str(x), return_type=str)]
+class _ObjectID(ObjectId):
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_after_validator_function(
+            cls.validate, core_schema.any_schema()
+        )
+
+    @classmethod
+    def validate(cls, value: Any):
+        return cls(value)
+
+
+ID = Annotated[
+    _ObjectID,
+    PlainSerializer(lambda x: str(x), return_type=str, when_used="json"),
+]
 
 
 # SHARED PROPERTIES
@@ -123,8 +140,19 @@ class PolygonAnnotation(Annotatation):
     type: Literal[AnnotationType.POLYGON] = AnnotationType.POLYGON
     coordinates: Points
 
+
+# AUTH
+
+
 class TokenOnlyResponse(BaseModel):
     token: str
+
+
+class TokenPayload(HasUserID):
+    exp: datetime.datetime
+    iat: datetime.datetime
+
+
 # PROJECTS
 
 

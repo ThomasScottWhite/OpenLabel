@@ -1,22 +1,44 @@
 from __future__ import annotations
 
 import logging
-from typing import Final
+from typing import Annotated, Final
 
 from bson.objectid import ObjectId
-from fastapi import APIRouter, HTTPException, status
+from DataAPI.auth_utils import auth_user
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import db, models
+from .. import db
+from .. import exceptions as exc
+from .. import models
 
 logger = logging.getLogger(__name__)
 
 _section_name: Final[str] = "user"
-from fastapi import APIRouter, Depends
-from DataAPI.auth_utils import auth_user
-from ..exceptions import UserAlreadyExists, EmailAlreadyExists, RoleNotFound
+
+
 # Do not change the name of "router"!
 router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
+
+
+def resolve_user_id(user_id: str, auth_token: models.TokenPayload = Depends(auth_user)):
+    """Resolves a `user_id` URL parameter to a ObjectId.
+
+    Notably, if `user_id` == "me", the userId from the auth token will be used.
+
+    Args:
+        user_id: The user-given user id.
+        auth_token: Authorization information.
+
+    Returns:
+        The resolved user id.
+    """
+    if user_id.lower() == "me":
+        return auth_token.userId
+    return models.ID(user_id)
+
+
+AutoID = Annotated[models.ID, Depends(resolve_user_id)]
 
 
 class CreateUserRequest(BaseModel):
@@ -30,6 +52,17 @@ class CreateUserRequest(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_user(request: CreateUserRequest) -> models.TokenOnlyResponse:
+    """Creates a new user and signs them in simultaneously.
+
+    Args:
+        request: The parameters of the user.
+
+    Raises:
+        HTTPException: 400; if the provided user or email already exists, or if the provide role does not exist
+
+    Returns:
+        The auth bearer token to use to authorize further requests.
+    """
 
     try:
         token = db.user.create_user(
@@ -40,31 +73,15 @@ def create_user(request: CreateUserRequest) -> models.TokenOnlyResponse:
             request.last_name,
             request.role_name,
         )
-    except UserAlreadyExists:
+    except (exc.UserAlreadyExists, exc.EmailAlreadyExists, exc.RoleNotFound) as e:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Provided username already exists.",
+            str(e),
         )
-    except EmailAlreadyExists:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Provided email already exists.",
-        )
-    except RoleNotFound:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Provided role does not exist.",
-        )
-    except ValueError as e:
-        print(f"[DEBUG] ValueError: {e}")
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-
     except Exception:
         raise
 
-    return {"token" : token}
-
-
+    return {"token": token}
 
 
 class LoginRequest(BaseModel):
@@ -83,64 +100,141 @@ def get_user_by_id(data: LoginRequest) -> models.TokenOnlyResponse:
             "Provided username and/or password was invalid.",
         )
 
-    return {"token" : token}
-
-# @router.get("/protected")
-# def protected_route(current_user: dict = Depends(auth_user)):
-#     return {"message": "Access granted", "user_id": current_user["user_id"]}
+    return {"token": token}
 
 
+@router.post("/logout")
+def get_user_by_id(auth_token: models.TokenPayload = Depends(auth_user)):
+    # TODO: this
+    raise NotImplementedError
 
-# Im not sure if we even want this
-@router.get("/get_user_information")
-def get_user_by_id(current_user: dict = Depends(auth_user)) -> models.UserNoPasswordWithID: 
-    current_user_id = current_user["user_id"]
-    user = db.user.get_user_by_id(ObjectId(current_user_id))
 
-    return user
-
-# Im also not sure if we want this
 @router.get("")
 def get_users(limit: int = 100) -> list[models.UserNoPasswordWithID]:
+    """Gets a list of all users.
+
+    Args:
+        limit: The maximum number of users to return. Defaults to 100.
+
+    Returns:
+        A list of users matching the provided parameters.
+    """
 
     users = db.user.get_users(limit)
-    print(users)
 
     return users
 
 
-@router.put("/update_user_id", status_code=status.HTTP_204_NO_CONTENT)
-def update_user_by_id(data: dict, current_user: dict = Depends(auth_user)):
+@router.get("/{user_id}")
+def get_user_by_id(
+    user_id: AutoID,
+    auth_token: models.TokenPayload = Depends(auth_user),
+) -> models.UserNoPasswordWithID:
+    """Fetches a user's data by ID.
 
-    current_user_id = current_user["user_id"]
+    Args:
+        user_id: The ID of the user to fetch. If "me", will infer a user ID based off the Authorization information.
+        auth_token: The authentication token provided by the Authorization header.
+
+    Returns:
+        The infomration regarding the user.
+    """
+    # TODO: auth stuff (if needed, else delete auth_token arg)
+
+    user = db.user.get_user_by_id(ObjectId(user_id))
+
+    if user is None:
+        HTTPException(status.HTTP_404_NOT_FOUND, "Could not find requested user.")
+
+    return user
+
+
+@router.patch("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def update_user_by_id(
+    user_id: AutoID,
+    data: dict,
+    auth_token: models.TokenPayload = Depends(auth_user),
+):
+    """Updates a user by its ID.
+
+    Args:
+        user_id: The ID of the user to fetch. If "me", will infer a user ID based off the Authorization information.
+        data: A mapping of the fields to update to their new values. See `models.User` for the valid fields.
+            `role_name` is also a valid field to update and will update a user's `roleId` indirectly.
+        auth_token: The authentication token provided by the Authorization header.
+
+    Raises:
+        HTTPException: 403; if the caller lacks sufficient permissions to modify the specified user.
+        HTTPException: 400; if the `data` field is improperly formatted.
+    """
+    # TODO: do auth here; ensure auth_token allows modification of user with id user_id
+
+    # basic auth potentially
+    if auth_token.userId != user_id:
+        raise HTTPException(status.HTTP_403_UNAUTHORIZED, "Invalid permissions.")
+
     if not data:
         return
 
     try:
-        db.user.update_user(ObjectId(current_user_id), data)
-    except ValueError as e:
+        db.user.update_user(user_id, data)
+    except (
+        exc.UserAlreadyExists,
+        exc.EmailAlreadyExists,
+        exc.InvalidPatchMap,
+        exc.RoleNotFound,
+    ) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception:
         raise
 
 
-@router.get("/user_preferences")
-def get_user_preferences(current_user: dict = Depends(auth_user)) -> models.UserPreferences:
+@router.get("/{user_id}/preferences")
+def get_user_preferences(
+    user_id: AutoID,
+    auth_token: models.TokenPayload = Depends(auth_user),
+) -> models.UserPreferences:
+    """Fetches the user's preferences.
 
-    user_id = current_user["user_id"]
-    user = db.user.get_user_preferences(ObjectId(user_id))
+    Args:
+        user_id: The ID of the user to fetch. If "me", will infer a user ID based off the Authorization information.
+        auth_token: The authentication token provided by the Authorization header.
+
+    Returns:
+        The user's preferences.
+    """
+    # TODO: do auth by comparing permissions of auth_token to the user being modified (user_id)
+
+    user = db.user.get_user_preferences(user_id)
 
     return user
 
 
-@router.put("/update_user_preferences", status_code=status.HTTP_204_NO_CONTENT)
-def update_user_preferences(data, current_user: dict = Depends(auth_user)):
+@router.patch("/{user_id}/preferences", status_code=status.HTTP_204_NO_CONTENT)
+def update_user_preferences(
+    user_id: AutoID, data: dict, auth_token: models.TokenPayload = Depends(auth_user)
+):
+    """Updates a user by its ID.
 
-    
-    user_id = current_user["user_id"]
+    Args:
+        user_id: The ID of the user to fetch. If "me", will infer a user ID based off the Authorization information.
+        data: A mapping of the fields to update to their new values. See `models.UserPreferences` for the valid fields.
+            `role_name` is also a valid field to update and will update a user's `roleId` indirectly.
+        auth_token: The authentication token provided by the Authorization header.
+
+    Raises:
+        HTTPException: 403; if the caller lacks sufficient permissions to modify the specified user.
+        HTTPException: 400; if the `data` field is improperly formatted.
+    """
+    # TODO: do auth by comparing permissions of auth_token to the user being modified (user_id)
+
+    # basic auth potentially
+    if auth_token.userId != user_id:
+        raise HTTPException(status.HTTP_403_UNAUTHORIZED, "Invalid permissions.")
+
     try:
-        db.user.update_user_preferences(ObjectId(user_id), data)
-    except ValueError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        db.user.update_user_preferences(user_id, data)
+    except exc.UserNotFound as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
     except Exception:
         raise

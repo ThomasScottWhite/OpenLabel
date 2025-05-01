@@ -1,13 +1,18 @@
 import datetime
+from typing import Any, Mapping
 
 import bcrypt
 from bson.objectid import ObjectId
 
-from .. import models
-from ..exceptions import UserAlreadyExists, EmailAlreadyExists, RoleNotFound
-from DataAPI.auth_utils import generate_token
+from .. import auth_utils, models
+from ..exceptions import (
+    EmailAlreadyExists,
+    InvalidPatchMap,
+    RoleNotFound,
+    UserAlreadyExists,
+    UserNotFound,
+)
 
-import os
 DEFAULT_ADMIN = {
     "username": "admin",
     "email": "admin@admin.com",
@@ -21,7 +26,7 @@ class UserManager:
     def __init__(self, db_manager):
         """Initialize with database manager"""
         self.db = db_manager.db
-        self.initalize_default_admin_user()
+
     def _get_role_id_by_name(self, role_name: str) -> ObjectId | None:
         """Returns the ID of the role with name `role_name` if it exists, else `None`
 
@@ -42,7 +47,7 @@ class UserManager:
         first_name: str,
         last_name: str,
         role_name: str = "annotator",
-    ) -> ObjectId:
+    ) -> str:
         """Creates a new user.
 
         Args:
@@ -54,12 +59,12 @@ class UserManager:
             role_name: The role the user takes globally. Defaults to "annotator".
 
         Raises:
-            ValueError: If the provided username is already taken.
-            ValueError: If the provided email is already in use.
-            ValueError: If the provided role is invalid.
+            UserAlreadyExists: If the provided username is already taken.
+            EmailAlreadyExists: If the provided email is already in use.
+            RoleNotFound: If the provided role is invalid.
 
         Returns:
-            The ID of the newly created user.
+            An auth token equivalent to if the user logged in.
         """
         # TODO: consider making custom errors for better communication with routes
         # Check if username or email already exists
@@ -84,15 +89,17 @@ class UserManager:
             lastName=last_name,
             roleId=role_id,
             isActive=True,
+            lastLogin=datetime.datetime.now(datetime.timezone.utc),
         )
 
-        result = self.db.users.insert_one(dict(user))
+        result = self.db.users.insert_one(user.model_dump())
 
         self.create_default_preferences(result.inserted_id)
 
-        return self.login(username, password)
+        # we don't need to check password, so just generate auth token immediately
+        return auth_utils.generate_token(result.inserted_id)
 
-    def login(self, username: str, password: str) -> dict | None:
+    def login(self, username: str, password: str) -> str | None:
         """Authenticates the user and returns an auth token if successful."""
         user = self.db.users.find_one({"username": username})
         if not user:
@@ -103,8 +110,8 @@ class UserManager:
                 {"_id": user["_id"]},
                 {"$set": {"lastLogin": datetime.datetime.now(datetime.timezone.utc)}},
             )
-            token = generate_token(user["_id"])
-            print(token)
+            token = auth_utils.generate_token(user["_id"])
+
             return token
             # return {
             #     "token": token,
@@ -112,7 +119,6 @@ class UserManager:
             #     "username": user["username"]
             # }
         return None
-
 
     def get_user_by_id(self, user_id: ObjectId) -> dict | None:
         """Returns a single user object matching the provided ID, or `None` if the user does not exist
@@ -138,7 +144,7 @@ class UserManager:
         """
         return list(self.db.users.find().limit(limit))
 
-    def update_user(self, user_id: ObjectId, update_data: dict) -> bool:
+    def update_user(self, user_id: ObjectId, update_data: Mapping[str, Any]) -> bool:
         """Updates a user based on the provided update_data. Updates are partial,
         merely overriding the keys provided.
 
@@ -149,10 +155,10 @@ class UserManager:
                 `role_name` can be used to change roles rather than specifing a role ID.
 
         Raises:
-            ValueError: If invalid keys are provided.
-            ValueError: When changing username, raises if the new username is already taken.
-            ValueError: When changing email, raises if the new email is already being used.
-            ValueError: When changing role, raises if the provided `role_name` is invalid.
+            InvalidPatchMap: If invalid keys are provided.
+            UserAlreadyExists: When changing username, raises if the new username is already taken.
+            EmailAlreadyExists: When changing email, raises if the new email is already being used.
+            RoleNotFound: When changing role, raises if the provided `role_name` is invalid.
 
         Returns:
             True if the user was updated, else False.
@@ -162,7 +168,7 @@ class UserManager:
             set(models.User.model_fields.keys()) | {"role_name"}
         )
         if invalid_keys:
-            raise ValueError(f"Invalid user keys: {', '.join(invalid_keys)}")
+            raise InvalidPatchMap(f"Invalid user keys: {', '.join(invalid_keys)}")
 
         # Don't allow updating username or email to existing values
         if "username" in update_data:
@@ -170,14 +176,18 @@ class UserManager:
                 {"username": update_data["username"], "_id": {"$ne": user_id}}
             )
             if existing:
-                raise ValueError(f"Username '{update_data['username']}' already exists")
+                raise UserAlreadyExists(
+                    f"Username '{update_data['username']}' already exists"
+                )
 
         if "email" in update_data:
             existing = self.db.users.find_one(
                 {"email": update_data["email"], "_id": {"$ne": user_id}}
             )
             if existing:
-                raise ValueError(f"Email '{update_data['email']}' already exists")
+                raise EmailAlreadyExists(
+                    f"Email '{update_data['email']}' already exists"
+                )
 
         # Hash password if it's being updated
         if "password" in update_data:
@@ -191,7 +201,7 @@ class UserManager:
             role_id = self._get_role_id_by_name(role_name)
 
             if role_id is None:
-                raise ValueError(f"Role '{role_name}' does not exist")
+                raise RoleNotFound(f"Role '{role_name}' does not exist")
 
             update_data["roleId"] = role_id
 
@@ -229,7 +239,9 @@ class UserManager:
         """
         return self.db.userPreferences.find_one({"userId": user_id})
 
-    def update_user_preferences(self, user_id: ObjectId, preferences: dict) -> bool:
+    def update_user_preferences(
+        self, user_id: ObjectId, preferences: Mapping[str, Any]
+    ) -> bool:
         """Updates the user preferences of a user.
 
         Args:
@@ -245,7 +257,7 @@ class UserManager:
         old: dict = self.db.userPreferences.find_one({"userId": user_id})
 
         if not old:
-            raise ValueError(f"User {user_id} does not have preferences.")
+            raise UserNotFound(f"User {user_id} does not have preferences.")
 
         # ensure that no new, unexpected properties are added
         for preference, model in (
@@ -264,7 +276,6 @@ class UserManager:
 
         result = self.db.userPreferences.update_one({"userId": user_id}, {"$set": old})
         return result.modified_count > 0
-
 
     def initalize_default_admin_user(self):
         """Creates a default admin user if it does not exist"""
