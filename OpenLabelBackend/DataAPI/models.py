@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -24,10 +26,22 @@ class AnnotationType(str, Enum):
     POLYGON = "polygon"
 
 
+class DataType(str, Enum):
+    TEXT = "text"
+    IMAGE = "image"
+
+
 class ExportFormat(str, Enum):
     COCO = "COCO"
     YOLO = "YOLO"
     ONNX = "ONNX"
+
+
+class RoleName(str, Enum):
+    ADMIN = "admin"
+    PROJECT_MANAGER = "project_manager"
+    ANNOTATOR = "annotator"
+    REVIEWER = "reviewer"
 
 
 class _ObjectID(ObjectId):
@@ -53,17 +67,19 @@ ID = Annotated[
 
 # SHARED PROPERTIES
 
+_now_field = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
+
 
 class HasCreatedAt(BaseModel):
-    createdAt: datetime.datetime = Field(
-        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
-    )
+    createdAt: datetime.datetime = _now_field
 
 
 class HasUpdatedAt(BaseModel):
-    updatedAt: datetime.datetime = Field(
-        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
-    )
+    updatedAt: datetime.datetime = _now_field
+
+
+class HasJoinedAt(BaseModel):
+    joinedAt: datetime.datetime = _now_field
 
 
 class HasCreatedBy(BaseModel):
@@ -90,6 +106,10 @@ class HasRoleID(BaseModel):
     roleId: ID
 
 
+class ForbidExtra(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 # ROLES
 class Permission(BaseModel):
     resource: str
@@ -100,6 +120,10 @@ class Role(BaseModel):
     name: str
     permissions: list[Permission]
     description: str
+
+
+class RoleWithID(Role, HasRoleID):
+    pass
 
 
 # ANNOTATIONS
@@ -156,16 +180,18 @@ class TokenPayload(HasUserID):
 # PROJECTS
 
 
-class ProjectMember(HasUserID, HasRoleID):
+class ProjectMember(HasUserID, HasRoleID, HasJoinedAt):
+    pass
 
-    joinedAt: datetime.datetime = Field(
-        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
-    )
+
+class ProjectMemberDetails(HasJoinedAt):
+    user: UserNoPasswordWithID
+    role: RoleWithID
 
 
 class ProjectSettings(BaseModel):
-    exportFormat: ExportFormat = ExportFormat.COCO
-    annotatationTypes: list[AnnotationType]
+    dataType: DataType
+    annotatationType: str
     isPublic: bool = False
 
 

@@ -2,7 +2,11 @@ class UserAlreadyExists(Exception):
     pass
 
 
-class UserNotFound(Exception):
+class ResourceNotFound(Exception):
+    pass
+
+
+class PermissionError(Exception):
     pass
 
 
@@ -15,4 +19,8 @@ class RoleNotFound(Exception):
 
 
 class InvalidPatchMap(Exception):
+    pass
+
+
+class ProjectNameExists(Exception):
     pass

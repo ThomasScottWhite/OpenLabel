@@ -8,9 +8,9 @@ from .. import auth_utils, models
 from ..exceptions import (
     EmailAlreadyExists,
     InvalidPatchMap,
+    ResourceNotFound,
     RoleNotFound,
     UserAlreadyExists,
-    UserNotFound,
 )
 
 DEFAULT_ADMIN = {
@@ -257,7 +257,7 @@ class UserManager:
         old: dict = self.db.userPreferences.find_one({"userId": user_id})
 
         if not old:
-            raise UserNotFound(f"User {user_id} does not have preferences.")
+            raise ResourceNotFound(f"User {user_id} does not have preferences.")
 
         # ensure that no new, unexpected properties are added
         for preference, model in (

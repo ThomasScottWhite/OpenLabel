@@ -41,7 +41,7 @@ The easiest way to run this code is using three terminal instances: one for the 
 You need to have `podman` or `docker` installed to run the database. If you are using docker, replace `podman` with `docker`, and it should function the same.
 
 ```sh
-podman run --detach --name openlabel_db --replace -p 27017:27017 docker.io/mongodb/mongodb-community-server:latest
+podman run --detach --replace --name openlabel_db --replace -p 27017:27017 docker.io/mongodb/mongodb-community-server:latest
 ```
 
 ### Start the Backend (API)

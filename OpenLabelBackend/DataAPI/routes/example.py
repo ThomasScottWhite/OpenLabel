@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Final
 
-from fastapi import APIRouter
-
 from DataAPI import db, models
+from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 

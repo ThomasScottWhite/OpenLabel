@@ -1,7 +1,10 @@
 import datetime
-from typing import Dict, List, Optional
 
 from bson.objectid import ObjectId
+from pydantic import ConfigDict, TypeAdapter
+
+from .. import exceptions as exc
+from .. import models
 
 
 class ProjectManager:
@@ -10,7 +13,6 @@ class ProjectManager:
     def __init__(self, db_manager):
         """Initialize with database manager"""
         self.db = db_manager.db
-        self.initalize_default_projects()
 
     # Current supported annotation types
     # export interface AnnotatorLayout {
@@ -22,7 +24,7 @@ class ProjectManager:
         self,
         name: str,
         description: str,
-        data_type: str,
+        data_type: models.DataType,
         annotation_type: str,
         created_by: ObjectId,
         is_public: bool = False,
@@ -32,49 +34,68 @@ class ProjectManager:
         existing = self.db.projects.find_one({"name": name, "createdBy": created_by})
 
         if existing:
-            raise ValueError(f"Project '{name}' already exists for this user")
+            raise exc.ProjectNameExists(
+                f"Project '{name}' already exists for this user"
+            )
 
-
-        project_doc = {
-            "name": name,
-            "description": description,
-            "createdBy": created_by,
-            "createdAt": datetime.datetime.utcnow(),
-            "updatedAt": datetime.datetime.utcnow(),
-            "members": [
-                {
-                    "userId": created_by,
-                    # Admin role for creator
-                    "roleId": self.db.roles.find_one({"name": "admin"})["_id"],
-                    "joinedAt": datetime.datetime.utcnow(),
-                }
+        project_doc = models.Project(
+            name=name,
+            description=description,
+            createdBy=created_by,
+            members=[
+                models.ProjectMember(
+                    userId=created_by,
+                    roleId=self.db.roles.find_one({"name": "admin"})["_id"],
+                ),
             ],
-            "settings": {
-                "data_type": data_type,
-                "annotation_type": annotation_type,
-                "isPublic": is_public,
-            },
-        }
+            settings=models.ProjectSettings(
+                dataType=data_type,
+                annotatationType=annotation_type,
+                isPublic=is_public,
+            ),
+        )
 
-        result = self.db.projects.insert_one(project_doc)
+        result = self.db.projects.insert_one(project_doc.model_dump())
         return result.inserted_id
 
-    def get_project_by_id(self, project_id: ObjectId) -> Optional[Dict]:
+    def get_project_by_id(self, project_id: ObjectId) -> dict | None:
         """Get project by ID"""
         return self.db.projects.find_one({"_id": project_id})
 
-    def get_projects_by_user(self, user_id: ObjectId) -> List[Dict]:
+    def get_projects_by_user(self, user_id: ObjectId) -> list[dict]:
         """Get projects where user is a member"""
         return list(self.db.projects.find({"members.userId": user_id}))
 
     def update_project(
-        self, project_id: ObjectId, update_data: Dict, user_id: ObjectId
+        self, project_id: ObjectId, update_data: dict, user_id: ObjectId
     ) -> bool:
-        """Update project information if user has permission"""
+        """Update project information if user has permission
+
+        Args:
+            project_id: _description_
+            update_data: _description_
+            user_id: _description_
+
+        Raises:
+            ResourceNotFound: If the project was not found.
+            InvalidPatchMap: If `update_data` was invalid.
+            PermissionError: If the user provided does not have permission to update the project.
+            ProjectNameExists: If the user attempts to update the project name to an existing project name.
+
+        Returns:
+            True if something was modified, False otherwise.
+        """
         project = self.get_project_by_id(project_id)
 
         if not project:
-            raise ValueError("Project not found")
+            raise exc.ResourceNotFound("Project not found")
+
+        valid_keys = {"name", "description", "settings"}
+        invalid_keys = set(update_data.keys()) - valid_keys
+        if invalid_keys:
+            raise exc.InvalidPatchMap(
+                f"Keys {''.join(invalid_keys)} are not valid keys for updating projects!"
+            )
 
         # Check if user is a member with admin or project_manager role
         has_permission = False
@@ -86,7 +107,16 @@ class ProjectManager:
                     break
 
         if not has_permission:
-            raise ValueError("User does not have permission to update this project")
+            raise exc.PermissionError(
+                "User does not have permission to update this project"
+            )
+
+        # Update settings if provided
+        if "settings" in update_data:
+            update_data["settings"] = {**project["settings"], **update_data["settings"]}
+
+            # ensure validity of changes
+            models.ProjectSettings.model_validate(update_data["settings"])
 
         # Don't allow updating name to an existing name
         if "name" in update_data:
@@ -98,14 +128,12 @@ class ProjectManager:
                 }
             )
             if existing:
-                raise ValueError(f"Project name '{update_data['name']}' already exists")
-
-        # Update settings if provided
-        if "settings" in update_data:
-            update_data["settings"] = {**project["settings"], **update_data["settings"]}
+                raise exc.ProjectNameExists(
+                    f"Project name '{update_data['name']}' already exists"
+                )
 
         # Always update the updatedAt field
-        update_data["updatedAt"] = datetime.datetime.utcnow()
+        update_data["updatedAt"] = datetime.datetime.now(datetime.timezone.utc)
 
         result = self.db.projects.update_one({"_id": project_id}, {"$set": update_data})
 
@@ -118,11 +146,27 @@ class ProjectManager:
         role_name: str,
         added_by: ObjectId,
     ) -> bool:
-        """Add a user to a project with specified role"""
+        """Add a user to a project with specified role
+
+        Args:
+            project_id: The project to add the user to.
+            user_id: The ID of the user to add to the project.
+            role_name: The role to assign to the new member.
+            added_by: The user adding the member to the project.
+
+        Raises:
+            ResourceNotFound: If the project does not exist.
+            PermissionError: If the `added_by` user does not have permission to add members.
+            UserAlreadyExists: If the provided user was already added to the project.
+            RoleNotFound: If the specified role does not exist.
+
+        Returns:
+            _description_
+        """
         project = self.get_project_by_id(project_id)
 
         if not project:
-            raise ValueError("Project not found")
+            raise exc.ResourceNotFound("Project not found")
 
         # Check if the adding user has permission
         has_permission = False
@@ -130,21 +174,24 @@ class ProjectManager:
             if member["userId"] == added_by:
                 role = self.db.roles.find_one({"_id": member["roleId"]})
                 if role and role["name"] in ["admin", "project_manager"]:
-                    has_permission = True
+                    has_permission = (
+                        role_name == models.RoleName.ADMIN
+                        and role["name"] == models.RoleName.ADMIN
+                    ) or role_name != models.RoleName.ADMIN
                     break
 
         if not has_permission:
-            raise ValueError("User does not have permission to add members")
+            raise exc.PermissionError("User does not have permission to add members")
 
         # Check if user already a member
         for member in project["members"]:
             if member["userId"] == user_id:
-                raise ValueError("User is already a member of this project")
+                raise exc.UserAlreadyExists("User is already a member of this project")
 
         # Get role ID
         role = self.db.roles.find_one({"name": role_name})
         if not role:
-            raise ValueError(f"Role '{role_name}' does not exist")
+            raise exc.RoleNotFound(f"Role '{role_name}' does not exist")
 
         # Add user to project
         result = self.db.projects.update_one(
@@ -162,12 +209,12 @@ class ProjectManager:
 
         return result.modified_count > 0
 
-    def get_project_members(self, project_id: ObjectId) -> List[Dict]:
+    def get_project_members(self, project_id: ObjectId) -> list[dict]:
         """Get all members of a project with their roles"""
         project = self.get_project_by_id(project_id)
 
         if not project:
-            raise ValueError("Project not found")
+            raise exc.ResourceNotFound("Project not found")
 
         members = []
         for member in project["members"]:
@@ -177,32 +224,31 @@ class ProjectManager:
             if user and role:
                 members.append(
                     {
-                        "userId": user["_id"],
-                        "username": user["username"],
-                        "roleName": role["name"],
+                        "user": user,
+                        "role": role,
                         "joinedAt": member["joinedAt"],
                     }
                 )
 
         return members
 
-    def get_all_projects(self) -> List[Dict]:
+    def get_all_projects(self) -> list[dict]:
         """Get all projects"""
         return list(self.db.projects.find())
-    
+
     def initalize_default_projects(self):
         """Initialize default projects"""
 
         default_admin = self.db.users.find_one({"username": "admin"})
         if not default_admin:
             raise ValueError("Admin user not found")
-        
+
         admin_id = default_admin["_id"]
         try:
             self.create_project(
                 name="Default Project 1",
                 description="This is a default project for image object-detection.",
-                created_by=admin_id, 
+                created_by=admin_id,
                 is_public=True,
                 data_type="image",
                 annotation_type="object-detection",
@@ -213,7 +259,7 @@ class ProjectManager:
             self.create_project(
                 name="Default Project 2",
                 description="This is a default project for text classification.",
-                created_by=admin_id, 
+                created_by=admin_id,
                 is_public=True,
                 data_type="text",
                 annotation_type="classification",
@@ -224,11 +270,10 @@ class ProjectManager:
             self.create_project(
                 name="Default Project 3",
                 description="This is a default project for image classification.",
-                created_by=admin_id,  
+                created_by=admin_id,
                 is_public=True,
                 data_type="image",
                 annotation_type="classification",
             )
         except:
             pass
-

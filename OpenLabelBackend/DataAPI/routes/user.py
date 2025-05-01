@@ -47,7 +47,7 @@ class CreateUserRequest(BaseModel):
     password: str
     first_name: str
     last_name: str
-    role_name: str = "annotator"
+    role_name: str
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -78,8 +78,6 @@ def create_user(request: CreateUserRequest) -> models.TokenOnlyResponse:
             status.HTTP_400_BAD_REQUEST,
             str(e),
         )
-    except Exception:
-        raise
 
     return {"token": token}
 
@@ -185,8 +183,6 @@ def update_user_by_id(
         exc.RoleNotFound,
     ) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-    except Exception:
-        raise
 
 
 @router.get("/{user_id}/preferences")
@@ -234,7 +230,30 @@ def update_user_preferences(
 
     try:
         db.user.update_user_preferences(user_id, data)
-    except exc.UserNotFound as e:
+    except exc.ResourceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
-    except Exception:
-        raise
+
+
+@router.get("/{user_id}/projects")
+def get_user_projects(
+    user_id: AutoID,
+    auth_token: models.TokenPayload = Depends(auth_user),
+    owner: bool | None = None,
+) -> list[models.Project]:
+    """Fetches the user's projects.
+
+    Args:
+        user_id: The ID of the user to fetch. If "me", will infer a user ID based off the Authorization information.
+        auth_token: The authentication token provided by the Authorization header.
+        owner: Whether to only return projects the user owns (True), projects they don't own (False), or all projects (None/unset).
+
+    Returns:
+        The user's projects.
+    """
+    # TODO: do auth by comparing permissions of auth_token to the user being modified (user_id) perhaps??
+
+    projects = db.project.get_projects_by_user(user_id)
+
+    return filter(
+        lambda p: owner is None or ((p["createdBy"] == user_id) == owner), projects
+    )

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import pymongo
+from DataAPI.models import CRUD, Permission, Role, RoleName
 from pymongo import MongoClient
-import os
-from DataAPI.models import CRUD, Permission, Role
 
 ROLES = [
     Role(
@@ -63,6 +63,7 @@ ROLES = [
         description="Reviewer with annotation review capabilities",
     ),
 ]
+
 
 class MongoDBManager:
     """MongoDB database manager for OpenLabel"""
