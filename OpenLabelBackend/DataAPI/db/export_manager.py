@@ -3,11 +3,13 @@ from typing import Dict, List
 
 from bson.objectid import ObjectId
 
+from .db_manager import MongoDBManager
+
 
 class ExportManager:
     """Export functionality for OpenLabel"""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
 

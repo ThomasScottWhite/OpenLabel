@@ -12,6 +12,7 @@ from ..exceptions import (
     RoleNotFound,
     UserAlreadyExists,
 )
+from .db_manager import MongoDBManager
 
 DEFAULT_ADMIN = {
     "username": "admin",
@@ -23,7 +24,7 @@ DEFAULT_ADMIN = {
 class UserManager:
     """User management for OpenLabel"""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
 

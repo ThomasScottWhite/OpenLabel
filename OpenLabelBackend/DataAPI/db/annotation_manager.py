@@ -5,14 +5,17 @@ from bson.objectid import ObjectId
 from DataAPI.models import Coordinates, Point
 
 from .. import exceptions as exc
+from .db_manager import MongoDBManager
+from .image_manager import ImageManager
 
 
 class AnnotationManager:
     """Annotation management for OpenLabel"""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: MongoDBManager, img_manager: ImageManager):
         """Initialize with database manager"""
         self.db = db_manager.db
+        self.fs = img_manager.fs
 
     def create_mock_image(
         self,

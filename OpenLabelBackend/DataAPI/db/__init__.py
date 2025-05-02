@@ -19,8 +19,8 @@ from .user_manager import UserManager
 manager: Final[MongoDBManager] = MongoDBManager(CONFIG.mongo_uri, CONFIG.database_name)
 manager.initialize_roles()
 
-annotation: Final[AnnotationManager] = AnnotationManager(manager)
 image: Final[ImageManager] = ImageManager(manager)
+annotation: Final[AnnotationManager] = AnnotationManager(manager, image)
 export: Final[ExportManager] = ExportManager(manager)
 project: Final[ProjectManager] = ProjectManager(manager)
 user: Final[UserManager] = UserManager(manager)

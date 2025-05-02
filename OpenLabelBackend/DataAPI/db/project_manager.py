@@ -1,16 +1,16 @@
 import datetime
 
 from bson.objectid import ObjectId
-from pydantic import ConfigDict, TypeAdapter
 
 from .. import exceptions as exc
 from .. import models
+from .db_manager import MongoDBManager
 
 
 class ProjectManager:
     """Project management for OpenLabel"""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
 
