@@ -79,6 +79,6 @@ def download_image(
 
     data, meta = download
 
-    encoded_data = base64.b64encode(data).decode()
+    encoded_data = base64.b64encode(data.getvalue()).decode()
 
     return ImageDownload(data=encoded_data, metadata=meta)
