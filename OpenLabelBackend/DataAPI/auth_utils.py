@@ -34,6 +34,13 @@ def decode_token(token: str) -> models.TokenPayload:
         )
 
 
+def refresh_token(token: str) -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    decoded_payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    decoded_payload["exp"] = now + datetime.timedelta(hours=1)
+    return jwt.encode(decoded_payload, SECRET_KEY, algorithms=[ALGORITHM])
+
+
 def auth_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
 ) -> models.TokenPayload:
