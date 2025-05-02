@@ -34,6 +34,11 @@ class AnnotationType(str, Enum):
     POLYGON = "polygon"
 
 
+class ProjectAnnotationType(str, Enum):
+    CLASSIFICATION = "classification"
+    OBJECT_DETECTION = "object-detection"
+
+
 class DataType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
@@ -213,7 +218,7 @@ class ProjectMemberDetails(HasJoinedAt):
 
 class ProjectSettings(BaseModel):
     dataType: DataType
-    annotatationType: str
+    annotatationType: ProjectAnnotationType
     isPublic: bool = False
 
 
