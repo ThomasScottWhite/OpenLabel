@@ -27,7 +27,7 @@ class UserManager:
     def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
-
+        
     def _get_role_id_by_name(self, role_name: str) -> ObjectId | None:
         """Returns the ID of the role with name `role_name` if it exists, else `None`
 

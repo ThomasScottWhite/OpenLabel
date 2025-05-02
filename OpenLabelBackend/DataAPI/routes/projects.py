@@ -78,14 +78,14 @@ def get_project_by_id(
 
     project = models.Project.model_validate(project)
 
-    # potential auth???
-    for member in project.members:
-        if member.userId == auth_token.userId:
-            break
-    else:  # only runs if loop doesn't break (i.e., if auth user is not in members)
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Insufficient permissions to view this object."
-        )
+    # # potential auth???
+    # for member in project.members:
+    #     if member.userId == auth_token.userId:
+    #         break
+    # else:  # only runs if loop doesn't break (i.e., if auth user is not in members)
+    #     raise HTTPException(
+    #         status.HTTP_403_FORBIDDEN, "Insufficient permissions to view this object."
+    #     )
 
     return project
 

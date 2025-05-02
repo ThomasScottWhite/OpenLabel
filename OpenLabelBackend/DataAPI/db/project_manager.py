@@ -54,7 +54,7 @@ class ProjectManager:
                 isPublic=is_public,
             ),
         )
-
+        
         result = self.db.projects.insert_one(project_doc.model_dump())
         return result.inserted_id
 

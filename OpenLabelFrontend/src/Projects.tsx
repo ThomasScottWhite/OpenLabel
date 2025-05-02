@@ -4,8 +4,8 @@ import { Link } from "react-router-dom";
 import { BsTrash, BsGear } from "react-icons/bs";
 
 interface ProjectSettings {
-  data_type: "image" | "text";
-  annotation_type: "object-detection" | "classification";
+  dateType: "image" | "text";
+  annotationType: "object-detection" | "classification";
   isPublic: boolean;
 }
 
@@ -34,7 +34,7 @@ const ProjectList = () => {
       try {
         const token = localStorage.getItem("token");
 
-        const response = await fetch("/api/projects/projects", {
+        const response = await fetch("/api/projects", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -45,7 +45,7 @@ const ProjectList = () => {
         }
 
         const data = await response.json();
-        setProjects(data.projects); // assuming response is { projects: [...] }
+        setProjects(data); // assuming response is { projects: [...] }
       } catch (error) {
         console.error("Error fetching projects:", error);
         alert("Failed to load projects");

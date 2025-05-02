@@ -33,12 +33,13 @@
     },
     {
       "name": "Backend (python -m DataAPI)",
-      "type": "debugpy",
-      "cwd": "${workspaceFolder}/OpenLabelBackend",
+      "type": "python",
       "request": "launch",
       "module": "DataAPI",
+      "args": ["--reload"],
+      "cwd": "${workspaceFolder}/OpenLabelBackend",
       "console": "integratedTerminal",
       "justMyCode": true
     }
-  ]
+          ]
 }
