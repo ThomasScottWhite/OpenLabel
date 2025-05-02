@@ -25,7 +25,7 @@ class ProjectManager:
         name: str,
         description: str,
         data_type: models.DataType,
-        annotation_type: str,
+        annotation_type: models.ProjectAnnotationType,
         created_by: ObjectId,
         is_public: bool = False,
     ) -> ObjectId:
