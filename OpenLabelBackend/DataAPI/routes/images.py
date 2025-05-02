@@ -31,6 +31,18 @@ def get_image_meta(
     image_id: models.ID,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> models.ImageMeta:
+    """Fetches the metadata for image with ID `image_id`.
+
+    Args:
+        image_id: The ID of the image for which to fetch metadata.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified image does not exist
+
+    Returns:
+        The image meta.
+    """
     # TODO: auth (may have to dig into project roles, etc.)
 
     meta = db.image.get_image_by_id(image_id)
@@ -45,11 +57,20 @@ def get_image_meta(
     return meta
 
 
-@router.delete("/{image_id}")
+@router.delete("/{image_id}", status_code=status.HTTP_201_CREATED)
 def delete_image(
     image_id: models.ID,
     auth_token: models.TokenPayload = Depends(auth_user),
-) -> models.ImageMeta:
+):
+    """Deletes an image from the database.
+
+    Args:
+        image_id: The ID of the image to delete.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified image does not exist.
+    """
     # TODO: auth (may have to dig into project roles, etc.)
 
     try:
@@ -68,6 +89,19 @@ def download_image(
     image_id: models.ID,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> ImageDownload:
+    """Download the specified image and its corresponding metadata.
+
+    Args:
+        image_id: The ID of the image to download.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified image does not exist.
+
+    Returns:
+        A JSON payload containing a base64-encoded image (the `data` field) and
+        the image's metadata (a metadata object).
+    """
     # TODO: auth (may have to dig into project roles, etc.)
 
     download = db.image.download_image(image_id)
