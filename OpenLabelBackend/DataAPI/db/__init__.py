@@ -12,6 +12,7 @@ from DataAPI.config import CONFIG
 from .annotation_manager import AnnotationManager
 from .db_manager import MongoDBManager
 from .export_manager import ExportManager
+from .image_manager import ImageManager
 from .project_manager import ProjectManager
 from .user_manager import UserManager
 
@@ -19,6 +20,7 @@ manager: Final[MongoDBManager] = MongoDBManager(CONFIG.mongo_uri, CONFIG.databas
 manager.initialize_roles()
 
 annotation: Final[AnnotationManager] = AnnotationManager(manager)
+image: Final[ImageManager] = ImageManager(manager)
 export: Final[ExportManager] = ExportManager(manager)
 project: Final[ProjectManager] = ProjectManager(manager)
 user: Final[UserManager] = UserManager(manager)

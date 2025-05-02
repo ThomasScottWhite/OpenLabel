@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from typing import Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from PIL import Image
 from pydantic import BaseModel
 
 from .. import exceptions as exc
@@ -28,7 +30,7 @@ class CreateProjectRequest(BaseModel):
 
 
 @router.get("", status_code=status.HTTP_201_CREATED)
-def create_project(
+def get_project(
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.Project]:
     # TODO: auth here? idk if it needs it
@@ -143,3 +145,53 @@ def get_project_members(
         return members
     except exc.ResourceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+
+
+@router.get("/{project_id}/images")
+def get_project_images(
+    project_id: models.ID,
+    auth_token: models.TokenPayload = Depends(auth_user),
+    limit: int = 0,
+) -> list[models.ImageMeta]:
+    # TODO: do auth
+
+    try:
+        return db.image.get_images_by_project(project_id, limit)
+    except exc.ResourceNotFound as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+
+
+@router.post("/{project_id}/images")
+async def upload_image_to_project(
+    project_id: models.ID,
+    file: UploadFile,
+    auth_token: models.TokenPayload = Depends(auth_user),
+) -> list[models.ImageMeta]:
+    # TODO: do auth
+
+    if not file.content_type.startswith("image"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image types are allowed.",
+        )
+
+    contents = await file.read()
+
+    try:
+        image = Image.open(BytesIO(contents))
+        width, height = image.size
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to process the image.",
+        )
+
+    db.image.upload_image(
+        BytesIO(contents),
+        project_id,
+        auth_token.userId,
+        file.filename,
+        width,
+        height,
+        file.content_type,
+    )

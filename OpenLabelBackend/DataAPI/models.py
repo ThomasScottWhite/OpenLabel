@@ -4,6 +4,7 @@ import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
 
+import gridfs
 from bson.objectid import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PlainSerializer
 from pydantic_core import core_schema
@@ -255,10 +256,17 @@ class UserPreferences(HasUserID):
 
 
 class ImageMeta(HasCreatedBy, HasCreatedAt):
-
+    imageId: ID
     projectId: ID
+    filename: str
     width: int
     height: int
-    exif: dict
+    # exif: dict
     contentType: str  # use MIME types
     status: ImageStatus = ImageStatus.UNPROCESSED
+
+    @classmethod
+    def from_grid_out(cls, grid_out: gridfs.GridOut) -> ImageMeta:
+        return cls(
+            **grid_out.metadata, imageId=grid_out._id, filename=grid_out.filename
+        )

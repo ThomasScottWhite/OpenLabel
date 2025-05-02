@@ -2,8 +2,9 @@ import datetime
 from typing import Any
 
 from bson.objectid import ObjectId
-
 from DataAPI.models import Coordinates, Point
+
+from .. import exceptions as exc
 
 
 class AnnotationManager:
@@ -59,12 +60,12 @@ class AnnotationManager:
         # Ensure the image exists
         image = self.db.images.find_one({"_id": image_id})
         if not image:
-            raise ValueError("Image not found")
+            raise exc.ResourceNotFound("Image not found")
 
         # Check if user has permission to annotate in this project
         project = self.db.projects.find_one({"_id": project_id})
         if not project:
-            raise ValueError("Project not found")
+            raise exc.ResourceNotFound("Project not found")
 
         # Simple check that coordinates are within image bounds
         if (
