@@ -6,7 +6,14 @@ from typing import Annotated, Any, Literal
 
 import gridfs
 from bson.objectid import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PlainSerializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    GetCoreSchemaHandler,
+    PlainSerializer,
+)
 from pydantic_core import core_schema
 
 
@@ -18,7 +25,7 @@ class CRUD(str, Enum):
 
 
 class ImageStatus(str, Enum):
-    PROCESSED = "processed"
+    ANNOTATED = "annotated"
     UNPROCESSED = "unprocessed"
 
 
@@ -84,14 +91,10 @@ class HasJoinedAt(BaseModel):
 
 
 class HasCreatedBy(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     createdBy: ID
 
 
 class HasUserID(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     userId: ID
 
 
@@ -101,9 +104,15 @@ class HasUserIDAuto(HasUserID):
     userId: ID = Field(validation_alias="_id")
 
 
-class HasRoleID(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class HasProjectID(BaseModel):
+    projectId: ID
 
+
+class HasImageID(BaseModel):
+    imageId: ID
+
+
+class HasRoleID(BaseModel):
     roleId: ID
 
 
@@ -143,16 +152,14 @@ class Point(BaseModel):
 
 
 class Points(BaseModel):
-    points: list[Point]
+    points: Annotated[list[Point], Field(min_length=3)]
 
 
-class Annotatation(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
+class Annotatation(HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID, HasImageID):
+    annotationId: ID = Field(validation_alias="_id")
     type: AnnotationType
-    imageId: ID
-    projectID: ID
     label: str
     coordinates: Coordinates | Points
-    attributes: dict
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -164,6 +171,20 @@ class BoundingBoxAnnotation(Annotatation):
 class PolygonAnnotation(Annotatation):
     type: Literal[AnnotationType.POLYGON] = AnnotationType.POLYGON
     coordinates: Points
+
+
+class UpdateAnnotation(BaseModel):
+    """Intended use: update.model_dump(exclude_unset=True)
+
+    All default values are dummy values and are not intended to actually be used, hence
+    the excluding of unset parameters.
+    """
+
+    label: str = ""
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
+    coordinates: Coordinates | Points = Points(
+        points=[Point(x=0, y=0), Point(x=0, y=0), Point(x=0, y=0)]
+    )
 
 
 # AUTH
@@ -209,7 +230,7 @@ class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
 class UserNoPassword(HasCreatedAt, HasRoleID):
 
     username: str
-    email: str
+    email: EmailStr
     firstName: str
     lastName: str
     lastLogin: datetime.datetime | None = None
@@ -255,9 +276,7 @@ class UserPreferences(HasUserID):
 # IMAGES
 
 
-class ImageMeta(HasCreatedBy, HasCreatedAt):
-    imageId: ID
-    projectId: ID
+class ImageMeta(HasCreatedBy, HasCreatedAt, HasProjectID, HasImageID):
     filename: str
     width: int
     height: int
@@ -267,6 +286,7 @@ class ImageMeta(HasCreatedBy, HasCreatedAt):
 
     @classmethod
     def from_grid_out(cls, grid_out: gridfs.GridOut) -> ImageMeta:
+        print(grid_out.metadata, grid_out.filename)
         return cls(
             **grid_out.metadata, imageId=grid_out._id, filename=grid_out.filename
         )

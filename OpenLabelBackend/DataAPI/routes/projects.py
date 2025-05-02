@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
-from typing import Final
+from typing import Any, Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
@@ -40,7 +40,7 @@ def get_project(
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_project(
     request: CreateProjectRequest, auth_token: models.TokenPayload = Depends(auth_user)
-) -> str:
+) -> models.HasProjectID:
     """Creates a new project.
 
     Args:
@@ -63,7 +63,7 @@ def create_project(
             is_public=request.is_public,
             created_by=auth_token.userId,
         )
-        return str(project_id)
+        return models.HasProjectID(projectId=project_id)
     except exc.ProjectNameExists as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
@@ -161,37 +161,45 @@ def get_project_images(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
 
 
-@router.post("/{project_id}/images")
-async def upload_image_to_project(
+@router.post("/{project_id}/images", status_code=status.HTTP_201_CREATED)
+async def upload_images_to_project(
     project_id: models.ID,
-    file: UploadFile,
+    files: list[UploadFile],
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.ImageMeta]:
     # TODO: do auth
 
-    if not file.content_type.startswith("image"):
+    if not all([file.content_type.startswith("image") for file in files]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only image types are allowed.",
         )
 
-    contents = await file.read()
+    images: list[dict[str, Any]] = []
 
-    try:
-        image = Image.open(BytesIO(contents))
-        width, height = image.size
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to process the image.",
+    for file in files:
+        contents = await file.read()
+        await file.close()
+
+        try:
+            image = Image.open(BytesIO(contents))
+            width, height = image.size
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to process an image.",
+            )
+
+        images.append(
+            dict(
+                file=BytesIO(contents),
+                project_id=project_id,
+                creator_id=auth_token.userId,
+                filename=file.filename,
+                width=width,
+                height=height,
+                content_type=file.content_type,
+            )
         )
 
-    db.image.upload_image(
-        BytesIO(contents),
-        project_id,
-        auth_token.userId,
-        file.filename,
-        width,
-        height,
-        file.content_type,
-    )
+    return db.image.upload_images(images)

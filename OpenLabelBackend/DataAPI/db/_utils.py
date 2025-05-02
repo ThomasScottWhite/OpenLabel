@@ -1,24 +1,46 @@
+from typing import Callable
+
 from bson.objectid import ObjectId
+from pymongo.collection import Collection
 from pymongo.database import Database
 
 from .. import exceptions as exc
 
 
-def project_exists(db: Database, project_id: ObjectId, error: bool = False) -> bool:
-    project = db.projects.find_one({"_id": project_id})
-    if not project:
-        if error:
-            raise exc.ResourceNotFound(f"Project with id '{str(project_id)}' not found")
-        return False
-
-    return True
+def item_exists(collection: Collection, item_id: ObjectId):
+    return collection.find_one({"_id": item_id}) is not None
 
 
-def user_exists(db: Database, user_id: ObjectId, error: bool = False) -> bool:
-    project = db.users.find_one({"_id": user_id})
-    if not project:
-        if error:
-            raise exc.ResourceNotFound(f"User with id '{str(user_id)}' not found")
-        return False
+class _ExistsChecker:
 
-    return True
+    def __init__(self, collection: str, item_name: str = "Item"):
+        self.collection = collection
+        self.item_name = item_name
+
+    def __call__(self, db: Database, item_id: ObjectId, error: bool = False):
+        """
+        Returns `True` if the item exists, `False` otherwise. If `error` is `True`,
+        raises a ResourceException if the item does not exist instead of returning.
+
+        Args:
+            db: The pymongo Database object to use.
+            item_id: The ID of the item for which to check existence.
+            error: Whether to raise an error upon the item not existing. Defaults to False.
+
+        Raises:
+            ResourceError: if `error` is `True` and the specified item does not exist.
+
+        """
+        if not item_exists(db[self.collection], item_id):
+            if error:
+                raise exc.ResourceNotFound(
+                    f"{self.item_name} with ID '{str(item_id)}' not found"
+                )
+            return False
+
+        return True
+
+
+project_exists = _ExistsChecker("projects", "Project")
+user_exists = _ExistsChecker("users", "User")
+annotation_exists = _ExistsChecker("annotations", "Annotation")
