@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 from bson.objectid import ObjectId
 
@@ -14,12 +15,6 @@ class ProjectManager:
         """Initialize with database manager"""
         self.db = db_manager.db
 
-    # Current supported annotation types
-    # export interface AnnotatorLayout {
-    #   type: "image" | "text" ;
-    #   layout: "classification" | "object-detection"| string;
-    #   labels: string[];
-    # }
     def create_project(
         self,
         name: str,
@@ -27,6 +22,7 @@ class ProjectManager:
         data_type: models.DataType,
         annotation_type: models.ProjectAnnotationType,
         created_by: ObjectId,
+        labels: list[str],
         is_public: bool = False,
     ) -> ObjectId:
         """Create a new project"""
@@ -39,6 +35,7 @@ class ProjectManager:
             )
 
         project_doc = models.Project(
+            projectId=ObjectId(),
             name=name,
             description=description,
             createdBy=created_by,
@@ -52,19 +49,27 @@ class ProjectManager:
                 dataType=data_type,
                 annotatationType=annotation_type,
                 isPublic=is_public,
+                labels=labels,
             ),
         )
-        
-        result = self.db.projects.insert_one(project_doc.model_dump())
+
+        result = self.db.projects.insert_one(
+            project_doc.model_dump(exclude=["projectId"])
+        )
         return result.inserted_id
 
-    def get_project_by_id(self, project_id: ObjectId) -> dict | None:
+    def get_project_by_id(self, project_id: ObjectId) -> models.Project | None:
         """Get project by ID"""
-        return self.db.projects.find_one({"_id": project_id})
+        project = self.db.projects.find_one({"_id": project_id})
+        if project is None:
+            return None
 
-    def get_projects_by_user(self, user_id: ObjectId) -> list[dict]:
+        return models.Project.model_validate(project)
+
+    def get_projects_by_user(self, user_id: ObjectId) -> list[models.Project]:
         """Get projects where user is a member"""
-        return list(self.db.projects.find({"members.userId": user_id}))
+        projects = self.db.projects.find({"members.userId": user_id})
+        return [models.Project.model_validate(project) for project in projects]
 
     def update_project(
         self, project_id: ObjectId, update_data: dict, user_id: ObjectId
@@ -99,9 +104,9 @@ class ProjectManager:
 
         # Check if user is a member with admin or project_manager role
         has_permission = False
-        for member in project["members"]:
-            if member["userId"] == user_id:
-                role = self.db.roles.find_one({"_id": member["roleId"]})
+        for member in project.members:
+            if member.userId == user_id:
+                role = self.db.roles.find_one({"_id": member.roleId})
                 if role and role["name"] in ["admin", "project_manager"]:
                     has_permission = True
                     break
@@ -113,7 +118,10 @@ class ProjectManager:
 
         # Update settings if provided
         if "settings" in update_data:
-            update_data["settings"] = {**project["settings"], **update_data["settings"]}
+            update_data["settings"] = {
+                **project.settings.model_dump(),
+                **update_data["settings"],
+            }
 
             # ensure validity of changes
             models.ProjectSettings.model_validate(update_data["settings"])
@@ -123,7 +131,7 @@ class ProjectManager:
             existing = self.db.projects.find_one(
                 {
                     "name": update_data["name"],
-                    "createdBy": project["createdBy"],
+                    "createdBy": project.createdBy,
                     "_id": {"$ne": project_id},
                 }
             )
@@ -232,9 +240,10 @@ class ProjectManager:
 
         return members
 
-    def get_all_projects(self) -> list[dict]:
+    def get_all_projects(self) -> list[models.Project]:
         """Get all projects"""
-        return list(self.db.projects.find())
+        projects = self.db.projects.find()
+        return [models.Project.model_validate(project) for project in projects]
 
     def initalize_default_projects(self):
         """Initialize default projects"""

@@ -25,6 +25,7 @@ def init_test_data():
         is_public=True,
         data_type=models.DataType.IMAGE,
         annotation_type=models.ProjectAnnotationType.OBJECT_DETECTION,
+        labels=["bird", "cat"],
     )
     project2_id = db.project.create_project(
         name="Default Project 2",
@@ -33,6 +34,7 @@ def init_test_data():
         is_public=True,
         data_type=models.DataType.TEXT,
         annotation_type=models.ProjectAnnotationType.CLASSIFICATION,
+        labels=["verb", "noun", "adverb"],
     )
     project3_id = db.project.create_project(
         name="Default Project 3",
@@ -41,42 +43,51 @@ def init_test_data():
         is_public=True,
         data_type=models.DataType.IMAGE,
         annotation_type=models.ProjectAnnotationType.CLASSIFICATION,
+        labels=["car", "bike", "shirt"],
     )
 
     image_folder = Path(__file__).resolve().parents[1] / "test_data"
 
-    project1_imgs = []
-    project3_imgs = []
+    project1_files = []
+    project2_files = []
+    project3_files = []
 
     for filename in ("test_image1.png", "test_image2.png"):
         with open(image_folder / filename, "rb") as f:
-            image = Image.open(BytesIO(f.read()))
-            width, height = image.size
-            meta = db.image.upload_image(
+            meta = db.file.upload_file(
                 f,
                 project1_id,
                 admin_id,
                 filename,
-                width,
-                height,
                 content_type="image/png",
             )
-            project1_imgs.append(meta)
+            project1_files.append(meta)
+
+    for filename in ("test_text1.txt", "test_text2.txt"):
+        with open(image_folder / filename, "rb") as f:
+            meta = db.file.upload_file(
+                f,
+                project2_id,
+                admin_id,
+                filename,
+                content_type="text/plain",
+            )
+            project2_files.append(meta)
 
     for filename in ("test_image3.png", "test_image4.png"):
         with open(image_folder / filename, "rb") as f:
-            image = Image.open(BytesIO(f.read()))
-            width, height = image.size
-            meta = db.image.upload_image(
+            meta = db.file.upload_file(
                 f,
                 project3_id,
                 admin_id,
                 filename,
-                width,
-                height,
                 content_type="image/png",
             )
-            project3_imgs.append(meta)
+            project3_files.append(meta)
+
+    print(project1_files)
+    print(project2_files)
+    print(project3_files)
 
     # db.annotation.create_bounding_box(project1_imgs[0])
 

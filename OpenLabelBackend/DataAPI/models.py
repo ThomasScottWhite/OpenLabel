@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 import gridfs
 from bson.objectid import ObjectId
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     EmailStr,
     Field,
     GetCoreSchemaHandler,
     PlainSerializer,
+    computed_field,
 )
 from pydantic_core import core_schema
 
@@ -24,9 +26,9 @@ class CRUD(str, Enum):
     DELETE = "delete"
 
 
-class ImageStatus(str, Enum):
+class FileStatus(str, Enum):
     ANNOTATED = "annotated"
-    UNPROCESSED = "unprocessed"
+    UNANNOTATED = "unannotated"
 
 
 class AnnotationType(str, Enum):
@@ -37,11 +39,23 @@ class AnnotationType(str, Enum):
 class ProjectAnnotationType(str, Enum):
     CLASSIFICATION = "classification"
     OBJECT_DETECTION = "object-detection"
+    SEGMENTATION = "segmentation"
 
 
 class DataType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
+    VIDEO = "video"
+
+    @classmethod
+    def from_mime(cls, mime_type: str) -> DataType:
+        if mime_type.startswith("text"):
+            return cls.TEXT
+        elif mime_type.startswith("image"):
+            return cls.IMAGE
+        elif mime_type.startswith("video"):
+            return cls.VIDEO
+        raise ValueError(f"Cannot infer {cls.__name__} from MIME type '{mime_type}'")
 
 
 class ExportFormat(str, Enum):
@@ -106,15 +120,15 @@ class HasUserID(BaseModel):
 class HasUserIDAuto(HasUserID):
     """Same as HasUserID, but automatically populates the field from '_id'"""
 
-    userId: ID = Field(validation_alias="_id")
+    userId: ID = Field(validation_alias=AliasChoices("_id", "userId"))
 
 
 class HasProjectID(BaseModel):
     projectId: ID
 
 
-class HasImageID(BaseModel):
-    imageId: ID
+class HasFileID(BaseModel):
+    fileId: ID
 
 
 class HasRoleID(BaseModel):
@@ -160,22 +174,29 @@ class Points(BaseModel):
     points: Annotated[list[Point], Field(min_length=3)]
 
 
-class Annotatation(HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID, HasImageID):
-    annotationId: ID = Field(validation_alias="_id")
+class BaseAnnotatation(
+    HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID, HasFileID
+):
+    annotationId: ID = Field(validation_alias=AliasChoices("_id", "annotationId"))
     type: AnnotationType
     label: str
     coordinates: Coordinates | Points
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
-class BoundingBoxAnnotation(Annotatation):
+class BoundingBoxAnnotation(BaseAnnotatation):
     type: Literal[AnnotationType.BOUNDING_BOX] = AnnotationType.BOUNDING_BOX
     coordinates: Coordinates
 
 
-class PolygonAnnotation(Annotatation):
+class PolygonAnnotation(BaseAnnotatation):
     type: Literal[AnnotationType.POLYGON] = AnnotationType.POLYGON
     coordinates: Points
+
+
+Annotation = Annotated[
+    BoundingBoxAnnotation | PolygonAnnotation, Field(discriminator="type")
+]
 
 
 class UpdateAnnotation(BaseModel):
@@ -204,6 +225,72 @@ class TokenPayload(HasUserID):
     iat: datetime.datetime
 
 
+# FILES
+
+
+class _FileMetaBase(HasCreatedBy, HasCreatedAt, HasProjectID, HasFileID):
+    filename: str
+    # exif: dict
+    size: int
+    contentType: str  # use MIME types
+    type: DataType
+    status: FileStatus = FileStatus.UNANNOTATED
+
+    @classmethod
+    def from_grid_out(cls, grid_out: gridfs.GridOut) -> type[Self]:
+        print(grid_out.metadata, grid_out.filename)
+        return cls(
+            **grid_out.metadata,
+            fileId=grid_out._id,
+            filename=grid_out.filename,
+        )
+
+
+class TextMeta(_FileMetaBase):
+    type: Literal[DataType.TEXT] = DataType.TEXT
+
+
+class ImageMeta(_FileMetaBase):
+    type: Literal[DataType.IMAGE] = DataType.IMAGE
+    width: int
+    height: int
+
+
+class VideoMeta(ImageMeta):
+    type: Literal[DataType.VIDEO] = DataType.VIDEO
+    framerate: float
+    bitrate: float
+    duration: float
+    frameCount: int
+
+
+FileMeta = Annotated[ImageMeta | VideoMeta | TextMeta, Field(discriminator="type")]
+
+
+class File(BaseModel):
+    data: str
+    metadata: FileMeta
+
+
+def get_filemeta_model(content_type: str) -> type[FileMeta]:
+    """Returns a FileMeta type based on a MIME type
+
+    Args:
+        content_type: The type for which to get the associated FileMeta model.
+            Must be a MIME type, or simply "image", "text", or "video".
+
+    Returns:
+        The FileMeta type that corresponds with `contentType`.
+    """
+    if content_type.startswith("image"):
+        return ImageMeta
+    elif content_type.startswith("video"):
+        return VideoMeta
+    elif content_type.startswith("text"):
+        return TextMeta
+    raise ValueError(f"Could not find metadata model for type '{content_type}'")
+
+
 # PROJECTS
 
 
@@ -220,13 +307,29 @@ class ProjectSettings(BaseModel):
     dataType: DataType
     annotatationType: ProjectAnnotationType
     isPublic: bool = False
+    labels: list[str] = Field([])
 
 
-class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
+class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID):
+    projectId: ID = Field(validation_alias=AliasChoices("_id", "projectId"))
     name: str
     description: str
-    members: list[ProjectMember]
     settings: ProjectSettings
+    members: list[ProjectMember]
+
+
+class ProjectWithFiles(Project):
+    files: list[FileMeta] = Field([])
+
+    @computed_field
+    @property
+    def numAnnotated(self) -> int:
+        return sum([1 for f in self.files if f.status == FileStatus.ANNOTATED])
+
+    @computed_field
+    @property
+    def numFiles(self) -> int:
+        return len(self.files)
 
 
 # USERS
@@ -276,22 +379,3 @@ class UIPreferences(BaseModel):
 class UserPreferences(HasUserID):
     keyboardShortcuts: KeyboardShortcuts
     uiPreferences: UIPreferences
-
-
-# IMAGES
-
-
-class ImageMeta(HasCreatedBy, HasCreatedAt, HasProjectID, HasImageID):
-    filename: str
-    width: int
-    height: int
-    # exif: dict
-    contentType: str  # use MIME types
-    status: ImageStatus = ImageStatus.UNPROCESSED
-
-    @classmethod
-    def from_grid_out(cls, grid_out: gridfs.GridOut) -> ImageMeta:
-        print(grid_out.metadata, grid_out.filename)
-        return cls(
-            **grid_out.metadata, imageId=grid_out._id, filename=grid_out.filename
-        )

@@ -27,7 +27,7 @@ class UserManager:
     def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
-        
+
     def _get_role_id_by_name(self, role_name: str) -> ObjectId | None:
         """Returns the ID of the role with name `role_name` if it exists, else `None`
 
@@ -98,7 +98,7 @@ class UserManager:
         self.create_default_preferences(result.inserted_id)
 
         # we don't need to check password, so just generate auth token immediately
-        return auth_utils.generate_token(result.inserted_id)
+        return auth_utils.generate_token(str(result.inserted_id))
 
     def login(self, username: str, password: str) -> str | None:
         """Authenticates the user and returns an auth token if successful."""

@@ -24,3 +24,7 @@ class InvalidPatchMap(Exception):
 
 class ProjectNameExists(Exception):
     pass
+
+
+class InvalidFileFormat(Exception):
+    pass

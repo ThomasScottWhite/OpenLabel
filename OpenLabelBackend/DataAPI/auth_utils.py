@@ -1,15 +1,12 @@
 import datetime
 
-from dotenv import load_dotenv
-import os
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from . import models
+from .config import CONFIG
 
-load_dotenv()
-SECRET_KEY = os.getenv("AUTH_SECRET_KEY")
 ALGORITHM = "HS256"
 
 
@@ -20,12 +17,12 @@ def generate_token(user_id: str) -> str:
         "exp": now + datetime.timedelta(hours=1),
         "iat": now,
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, CONFIG.auth_secret_key, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> models.TokenPayload:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, CONFIG.auth_secret_key, algorithms=[ALGORITHM])
         return models.TokenPayload(**payload)
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -39,9 +36,9 @@ def decode_token(token: str) -> models.TokenPayload:
 
 def refresh_token(token: str) -> str:
     now = datetime.datetime.now(datetime.timezone.utc)
-    decoded_payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    decoded_payload = jwt.decode(token, CONFIG.auth_secret_key, algorithms=[ALGORITHM])
     decoded_payload["exp"] = now + datetime.timedelta(hours=1)
-    return jwt.encode(decoded_payload, SECRET_KEY, algorithms=[ALGORITHM])
+    return jwt.encode(decoded_payload, CONFIG.auth_secret_key, algorithms=[ALGORITHM])
 
 
 def auth_user(

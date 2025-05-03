@@ -7,7 +7,6 @@ from typing import Any, Final
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from PIL import Image
 from pydantic import BaseModel
 
 from .. import exceptions as exc
@@ -21,20 +20,21 @@ _section_name: Final[str] = "projects"
 router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
 
 
-class CreateProjectRequest(BaseModel):
-    name: str
-    description: str
-    data_type: models.DataType
-    annotation_type: str
-    is_public: bool
-
-
-@router.get("", status_code=status.HTTP_201_CREATED)
-def get_project(
+@router.get("")
+def get_projects(
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.Project]:
     # TODO: auth here? idk if it needs it
     return db.project.get_all_projects()
+
+
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: str
+    dataType: models.DataType
+    annotationType: models.ProjectAnnotationType
+    isPublic: bool
+    labels: list[str]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -58,9 +58,9 @@ def create_project(
         project_id = db.project.create_project(
             name=request.name,
             description=request.description,
-            data_type=request.data_type,
-            annotation_type=request.annotation_type,
-            is_public=request.is_public,
+            data_type=request.dataType,
+            annotation_type=request.annotationType,
+            is_public=request.isPublic,
             created_by=auth_token.userId,
         )
         return models.HasProjectID(projectId=project_id)
@@ -71,12 +71,18 @@ def create_project(
 @router.get("/{project_id}")
 def get_project_by_id(
     project_id: models.ID, auth_token: models.TokenPayload = Depends(auth_user)
-) -> models.Project:
+) -> models.ProjectWithFiles:
     # TODO: authentication?? should the user have to be part of the project to see it??
 
     project = db.project.get_project_by_id(project_id)
 
-    project = models.Project.model_validate(project)
+    if project is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Project with ID {str(project_id)} does not exist.",
+        )
+
+    files = db.file.get_files_by_project(project_id)
 
     # # potential auth???
     # for member in project.members:
@@ -87,7 +93,7 @@ def get_project_by_id(
     #         status.HTTP_403_FORBIDDEN, "Insufficient permissions to view this object."
     #     )
 
-    return project
+    return dict(**project.model_dump(), files=files)
 
 
 @router.patch("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -147,59 +153,43 @@ def get_project_members(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
 
 
-@router.get("/{project_id}/images")
+@router.get("/{project_id}/files")
 def get_project_images(
     project_id: models.ID,
     auth_token: models.TokenPayload = Depends(auth_user),
     limit: int = 0,
-) -> list[models.ImageMeta]:
+) -> list[models.FileMeta]:
     # TODO: do auth
 
     try:
-        return db.image.get_images_by_project(project_id, limit)
+        return db.file.get_files_by_project(project_id, limit)
     except exc.ResourceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
 
 
-@router.post("/{project_id}/images", status_code=status.HTTP_201_CREATED)
+@router.post("/{project_id}/files", status_code=status.HTTP_201_CREATED)
 async def upload_images_to_project(
     project_id: models.ID,
     files: list[UploadFile],
     auth_token: models.TokenPayload = Depends(auth_user),
-) -> list[models.ImageMeta]:
+) -> list[models.FileMeta]:
     # TODO: do auth
-
-    if not all([file.content_type.startswith("image") for file in files]):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only image types are allowed.",
-        )
 
     images: list[dict[str, Any]] = []
 
     for file in files:
-        contents = await file.read()
+        contents = BytesIO(await file.read())
         await file.close()
-
-        try:
-            image = Image.open(BytesIO(contents))
-            width, height = image.size
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to process an image.",
-            )
 
         images.append(
             dict(
-                file=BytesIO(contents),
+                file=contents,
                 project_id=project_id,
                 creator_id=auth_token.userId,
                 filename=file.filename,
-                width=width,
-                height=height,
                 content_type=file.content_type,
             )
         )
+        db.file.upload_file()
 
-    return db.image.upload_images(images)
+    return db.file.upload_files(images)

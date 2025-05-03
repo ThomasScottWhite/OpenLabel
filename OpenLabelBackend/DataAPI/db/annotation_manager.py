@@ -7,29 +7,25 @@ from .. import exceptions as exc
 from .. import models
 from . import _utils
 from .db_manager import MongoDBManager
-from .image_manager import ImageManager
+from .file_manager import FileManager
 
 
 class AnnotationManager:
     """Annotation management for OpenLabel"""
 
-    def __init__(self, db_manager: MongoDBManager, img_manager: ImageManager):
+    def __init__(self, db_manager: MongoDBManager, file_manager: FileManager):
         """Initialize with database manager"""
         self.db = db_manager.db
-        self.img_man = img_manager
-        self.fs = img_manager.fs
+        self.file_man = file_manager
+        self.fs = file_manager.fs
 
-    def get_images_by_project(self, project_id: ObjectId) -> list[dict]:
-        """Get all images in a project"""
-        return list(self.db.images.find({"projectId": project_id}))
-
-    def _create_annotation(self, annotation: models.Annotatation) -> ObjectId:
+    def _create_annotation(self, annotation: models.BaseAnnotatation) -> ObjectId:
         result = self.db.annotations.insert_one(annotation.model_dump())
 
         # Update image status
         self.db.images.update_one(
-            {"_id": annotation.imageId},
-            {"$set": {"status": models.ImageStatus.ANNOTATED.value}},
+            {"_id": annotation.fileId},
+            {"$set": {"status": models.FileStatus.ANNOTATED.value}},
         )
 
         return result.inserted_id
@@ -45,7 +41,7 @@ class AnnotationManager:
         """Create a bounding box annotation"""
 
         # Ensure the image exists
-        if not self.img_man.get_image_by_id(image_id):
+        if not self.file_man.get_file_by_id(image_id):
             raise exc.ResourceNotFound(f"Image with ID '{str(image_id)}' not found")
 
         # Check if user has permission to annotate in this project
@@ -61,7 +57,7 @@ class AnnotationManager:
         #     raise ValueError("Bounding box coordinates outside image bounds")
 
         annotation = models.BoundingBoxAnnotation(
-            imageId=image_id,
+            fileId=image_id,
             projectId=project_id,
             label=label,
             coordinates=coordinates,
@@ -82,14 +78,14 @@ class AnnotationManager:
         """Create a polygon annotation"""
 
         # Ensure the image exists
-        if not self.img_man.get_image_by_id(image_id):
+        if not self.file_man.get_file_by_id(image_id):
             raise exc.ResourceNotFound(f"Image with ID '{str(image_id)}' not found")
 
         # Check if user has permission to annotate in this project
         _utils.project_exists(self.db, project_id, error=True)
 
         annotation = models.PolygonAnnotation(
-            imageId=image_id,
+            fileId=image_id,
             projectId=project_id,
             label=label,
             coordinates=models.Points(points=points),
@@ -99,9 +95,7 @@ class AnnotationManager:
 
         return self._create_annotation(annotation)
 
-    def get_annotations_by_image(
-        self, image_id: ObjectId, limit: int = 0
-    ) -> list[dict]:
+    def get_annotations_by_file(self, image_id: ObjectId, limit: int = 0) -> list[dict]:
         """Get all annotations for an image"""
         return list(self.db.annotations.find({"imageId": image_id}).limit(limit))
 
@@ -168,7 +162,7 @@ class AnnotationManager:
             # Update image status
             self.db.images.update_one(
                 {"_id": annotation["imageId"]},
-                {"$set": {"metadata.status": models.ImageStatus.UNPROCESSED.value}},
+                {"$set": {"metadata.status": models.FileStatus.UNANNOTATED.value}},
             )
 
         return result.deleted_count > 0
