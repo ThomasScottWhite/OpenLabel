@@ -5,11 +5,17 @@ import os
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
+import secrets
 from . import models
 
 load_dotenv()
 SECRET_KEY = os.getenv("AUTH_SECRET_KEY")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_urlsafe(32)  # 256-bit key
+    with open(".env", "a") as f:
+        f.write(f"\nAUTH_SECRET_KEY={SECRET_KEY}")
+    print("🔑 Generated new AUTH_SECRET_KEY and saved to .env")
+    
 ALGORITHM = "HS256"
 
 
