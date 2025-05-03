@@ -27,7 +27,6 @@ export interface Project {
   name: string;
   description: string;
   type: string;
-  annotator_layout: string;
   num_files: number;
   num_annotated: number;
   files: ProjectFile[];
