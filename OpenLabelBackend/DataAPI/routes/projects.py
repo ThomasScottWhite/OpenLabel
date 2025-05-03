@@ -11,7 +11,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from .. import exceptions as exc
-from .. import models
+from DataAPI import models
 
 logger = logging.getLogger(__name__)
 

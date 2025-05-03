@@ -53,6 +53,9 @@ class ProjectManager:
                 annotatationType=annotation_type,
                 isPublic=is_public,
             ),
+            numFiles=0,
+            numAnnotated=0,
+
         )
         
         result = self.db.projects.insert_one(project_doc.model_dump())

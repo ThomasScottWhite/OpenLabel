@@ -227,6 +227,8 @@ class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
     description: str
     members: list[ProjectMember]
     settings: ProjectSettings
+    numFiles: int = 0
+    numAnnotated: int = 0
 
 
 # USERS
