@@ -4,8 +4,8 @@ import { Link } from "react-router-dom";
 import { BsTrash, BsGear } from "react-icons/bs";
 
 interface ProjectSettings {
-  dateType: "image" | "text";
-  annotationType: "object-detection" | "classification";
+  dataType: "image" | "text";
+  annotatationType: "object-detection" | "classification";
   isPublic: boolean;
 }
 
@@ -45,7 +45,7 @@ const ProjectList = () => {
         }
 
         const data = await response.json();
-        setProjects(data); // assuming response is { projects: [...] }
+        setProjects(data);
       } catch (error) {
         console.error("Error fetching projects:", error);
         alert("Failed to load projects");
@@ -80,8 +80,8 @@ const ProjectList = () => {
                     className="text-muted"
                     style={{ fontSize: "0.8rem" }}
                   >
-                    {project.settings.data_type} /{" "}
-                    {project.settings.annotation_type}
+                    {project.settings.dataType} /{" "}
+                    {project.settings.annotatationType}
                   </Card.Text>
                 </div>
                 <Button

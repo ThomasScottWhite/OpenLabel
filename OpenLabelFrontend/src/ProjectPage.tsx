@@ -21,15 +21,25 @@ export interface ProjectFile {
   type: string;
   uploaded_at: string;
 }
+export interface ProjectSettings {
+  dataType: "image" | "text";
+  annotationType: "object-detection" | "classification";
+  isPublic: boolean;
+}
 
+export interface ProjectMember {
+  userId: string;
+  roleId: string;
+  // username: string; // This needs a username field provided by the backend
+}
 export interface Project {
   id: number;
   name: string;
   description: string;
-  type: string;
-  annotator_layout: string;
-  num_files: number;
-  num_annotated: number;
+  numFiles: number;
+  numAnnotated: number;
+  settings: ProjectSettings;
+  members: ProjectMember[];
   files: ProjectFile[];
 }
 
