@@ -1,12 +1,15 @@
 import datetime
 
+from dotenv import load_dotenv
+import os
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from . import models
 
-SECRET_KEY = "mynamejeff"
+load_dotenv()
+SECRET_KEY = os.getenv("AUTH_SECRET_KEY")
 ALGORITHM = "HS256"
 
 
