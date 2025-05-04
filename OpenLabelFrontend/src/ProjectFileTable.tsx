@@ -13,10 +13,17 @@ import { Table, Form, InputGroup } from "react-bootstrap";
 import { BsChevronDown, BsChevronUp } from "react-icons/bs";
 
 type FileItem = {
-  name: string;
+  fileId: string;
+  projectId: string;
+  createdAt: string;
+  createdBy: string;
+  filename: string;
   size: number;
-  type: string;
-  uploadedAt: string;
+  contentType: string;
+  type: "image" | "text";
+  status: "unannotated" | "annotated" | string;
+  width?: number;
+  height?: number;
 };
 
 interface Props {
@@ -49,7 +56,7 @@ const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
     },
     {
       header: "Name",
-      accessorKey: "name",
+      accessorKey: "filename",
       enableSorting: true,
     },
     {
@@ -65,7 +72,7 @@ const ProjectFileTable = ({ files, onSelectionChange }: Props) => {
     },
     {
       header: "Uploaded At",
-      accessorKey: "uploadedAt",
+      accessorKey: "createdAt",
       enableSorting: true,
     },
   ];

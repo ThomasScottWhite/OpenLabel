@@ -14,33 +14,44 @@ import {
 import { useRef, useState, useEffect } from "react";
 import ProjectFileTable from "./ProjectFileTable";
 export interface ProjectFile {
-  id: number;
-  name: string;
-  description: string;
+  fileId: string;
+  projectId: string;
+  createdAt: string;
+  createdBy: string;
+  filename: string;
   size: number;
-  type: string;
-  uploaded_at: string;
+  contentType: string;
+  type: "image" | "text";
+  status: "unannotated" | "annotated" | string;
+  width?: number;
+  height?: number;
 }
+
 export interface ProjectSettings {
   dataType: "image" | "text";
   annotationType: "object-detection" | "classification";
   isPublic: boolean;
+  labels: string[];
 }
 
 export interface ProjectMember {
   userId: string;
   roleId: string;
-  // username: string; // This needs a username field provided by the backend
+  joinedAt: string;
 }
+
 export interface Project {
-  id: number;
+  projectId: string;
   name: string;
   description: string;
-  numFiles: number;
-  numAnnotated: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
   settings: ProjectSettings;
   members: ProjectMember[];
   files: ProjectFile[];
+  numFiles: number;
+  numAnnotated: number;
 }
 
 const ProjectPage = () => {
@@ -61,79 +72,83 @@ const ProjectPage = () => {
       try {
         const res = await fetch(`/api/projects/${id}`);
         if (!res.ok) throw new Error("Failed to fetch project");
-        const data: Project = await res.json();
+        const data = await res.json();
         setProject(data);
         setFiles(data.files || []);
       } catch (err: any) {
-        console.error("Fetch error:", err);
         setError(err.message);
-
-        const demoProject: Project = {
-          id: 0,
-          name: "Demo Project",
-          description:
-            "This is fallback demo data shown when the project cannot be fetched.",
-          numFiles: 2,
-          numAnnotated: 1,
-          settings: {
-            dataType: "image",
-            annotationType: "object-detection",
-            isPublic: true,
-          },
-          members: [
-            {
-              userId: "demo-user",
-              roleId: "demo-role",
-              // username can be added when available from backend
-            },
-          ],
-          files: [
-            {
-              id: 1,
-              name: "demo_image.jpg",
-              description: "Sample image for demo purposes",
-              size: 204800,
-              type: "image/jpeg",
-              uploaded_at: new Date().toISOString(),
-            },
-            {
-              id: 2,
-              name: "demo_doc.txt",
-              description: "Sample text file for fallback",
-              size: 1024,
-              type: "text/plain",
-              uploaded_at: new Date().toISOString(),
-            },
-          ],
-        };
-
-        setProject(demoProject);
-        setFiles(demoProject.files);
       } finally {
         setLoading(false);
       }
     };
-
     fetchProject();
   }, [id]);
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = event.target.files;
-    if (!selected) return;
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFiles = event.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
-    const newFiles = Array.from(selected).map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type || "Unknown",
-      uploadedAt: new Date().toISOString(),
-    }));
+    const formData = new FormData();
+    for (const file of selectedFiles) {
+      formData.append("files", file);
+    }
 
-    setFiles((prev) => [...prev, ...newFiles]);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`/api/projects/${id}/files`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Upload failed:", errorData);
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Uploaded files:", result);
+    } catch (err) {
+      console.error("Error uploading files:", err);
+    }
   };
 
-  const handleDeleteSelected = () => {
-    const selectedNames = selectedFiles.map((f) => f.name);
-    setFiles(files.filter((f) => !selectedNames.includes(f.name)));
-    setSelectedFiles([]);
+  const handleDeleteSelected = async () => {
+    if (selectedFiles.length === 0) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      // This is bad, this need a single request
+      for (const file of selectedFiles) {
+        const response = await fetch(`/api/files/${file.fileId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error(`Failed to delete file ${file.fileId}:`, errorData);
+          alert(`Failed to delete file: ${file.filename}`);
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/projects/${id}`);
+      if (!res.ok) throw new Error("Failed to fetch project after deletion");
+      const data = await res.json();
+      setProject(data);
+      setFiles(data.files || []);
+      setSelectedFiles([]);
+    } catch (err) {
+      console.error("Error deleting files:", err);
+      alert("An error occurred while deleting files.");
+    }
   };
 
   const handleDownloadSelected = () => {
@@ -193,7 +208,7 @@ const ProjectPage = () => {
         <p>{project.description}</p>
         <ProgressBar
           now={(project.num_annotated / project.num_files) * 100}
-          label={`${project.num_annotated}/${project.num_files} Annotated`}
+          label={`${project.numAnnotated}/${project.numFiles} Annotated`}
         />
       </Card>
 

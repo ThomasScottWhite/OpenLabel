@@ -175,6 +175,10 @@ async def upload_images_to_project(
 ) -> list[models.FileMeta]:
     # TODO: do auth
 
+    print(f"Uploading {len(files)} files to project {project_id}")
+    print(files)
+    print(auth_token)
+
     images: list[dict[str, Any]] = []
 
     for file in files:
@@ -190,6 +194,5 @@ async def upload_images_to_project(
                 content_type=file.content_type,
             )
         )
-        db.file.upload_file()
 
     return db.file.upload_files(images)

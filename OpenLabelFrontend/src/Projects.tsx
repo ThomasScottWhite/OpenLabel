@@ -17,7 +17,7 @@ interface ProjectMember {
 }
 
 interface Project {
-  id: string;
+  projectId: string;
   name: string;
   description: string;
   createdBy: string;
@@ -66,7 +66,7 @@ const ProjectList = ({ reloadFlag }: { reloadFlag: boolean }) => {
   return (
     <Row className="g-4">
       {projects.map((project) => (
-        <Col key={project.id} xs={12} md={6} lg={4}>
+        <Col key={project.projectId} xs={12} md={6} lg={4}>
           <Card className="h-100 shadow-sm border-0 rounded-4">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start mb-2">
@@ -89,7 +89,7 @@ const ProjectList = ({ reloadFlag }: { reloadFlag: boolean }) => {
               </div>
               <div className="d-flex gap-2 mt-3">
                 <Link
-                  to={`/projects/${project.id}`}
+                  to={`/projects/${project.projectId}`}
                   className="btn btn-primary btn-sm w-100"
                 >
                   Open

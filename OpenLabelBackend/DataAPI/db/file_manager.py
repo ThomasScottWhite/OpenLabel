@@ -69,9 +69,8 @@ class FileManager:
             raise NotImplementedError("Videos have not been implemented yet.")
 
         # upload the file
-        with self.fs.open_upload_stream(
-            filename, metadata=meta, session=session
-        ) as grid_in:
+        file.seek(0)  # Ensure reading from beginning
+        with self.fs.open_upload_stream(filename, metadata=meta) as grid_in:
             grid_in.write(file.read())
             file_id = grid_in._id
 
