@@ -51,7 +51,7 @@ def get_file_meta(
     return meta
 
 
-@router.delete("/{file_id}", status_code=status.HTTP_201_CREATED)
+@router.delete("/{file_id}")
 def delete_image(
     file_id: models.ID,
     auth_token: models.TokenPayload = Depends(auth_user),

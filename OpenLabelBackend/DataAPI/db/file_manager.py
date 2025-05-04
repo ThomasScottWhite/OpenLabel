@@ -139,8 +139,9 @@ class FileManager:
 
         try:
             self.fs.delete(file_id)
-            # TODO: also have to delete associated annotations
         except gridfs.errors.NoFile:
             raise exc.ResourceNotFound(
                 f"Could not delete image with ID '{str(file_id)}' because it does not exist."
             )
+
+        self.db.annotations.delete_many({"fileId": file_id})
