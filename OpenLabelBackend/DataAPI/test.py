@@ -24,7 +24,7 @@ def init_test_data():
         created_by=admin_id,
         is_public=True,
         data_type=models.DataType.IMAGE,
-        annotation_type=models.ProjectAnnotationType.OBJECT_DETECTION,
+        annotation_type=models.AnnotationType.OBJECT_DETECTION,
         labels=["bird", "cat"],
     )
     project2_id = db.project.create_project(
@@ -33,7 +33,7 @@ def init_test_data():
         created_by=admin_id,
         is_public=True,
         data_type=models.DataType.TEXT,
-        annotation_type=models.ProjectAnnotationType.CLASSIFICATION,
+        annotation_type=models.AnnotationType.CLASSIFICATION,
         labels=["verb", "noun", "adverb"],
     )
     project3_id = db.project.create_project(
@@ -42,7 +42,7 @@ def init_test_data():
         created_by=admin_id,
         is_public=True,
         data_type=models.DataType.IMAGE,
-        annotation_type=models.ProjectAnnotationType.CLASSIFICATION,
+        annotation_type=models.AnnotationType.CLASSIFICATION,
         labels=["car", "bike", "shirt"],
     )
 

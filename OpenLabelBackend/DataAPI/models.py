@@ -15,6 +15,8 @@ from pydantic import (
     GetCoreSchemaHandler,
     PlainSerializer,
     computed_field,
+    field_validator,
+    model_validator,
 )
 from pydantic_core import core_schema
 
@@ -32,11 +34,6 @@ class FileStatus(str, Enum):
 
 
 class AnnotationType(str, Enum):
-    BOUNDING_BOX = "boundingBox"
-    POLYGON = "polygon"
-
-
-class ProjectAnnotationType(str, Enum):
     CLASSIFICATION = "classification"
     OBJECT_DETECTION = "object-detection"
     SEGMENTATION = "segmentation"
@@ -123,6 +120,10 @@ class HasUserIDAuto(HasUserID):
     userId: ID = Field(validation_alias=AliasChoices("_id", "userId"))
 
 
+class HasAnnotationID(BaseModel):
+    annotationId: ID
+
+
 class HasProjectID(BaseModel):
     projectId: ID
 
@@ -158,7 +159,7 @@ class RoleWithID(Role, HasRoleID):
 # ANNOTATIONS
 
 
-class Coordinates(BaseModel):
+class BBox(BaseModel):
     x: float
     y: float
     width: float
@@ -170,33 +171,84 @@ class Point(BaseModel):
     y: float
 
 
-class Points(BaseModel):
-    points: Annotated[list[Point], Field(min_length=3)]
+Polygon = Annotated[list[Point], Field(min_length=3)]
 
 
-class BaseAnnotatation(
-    HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID, HasFileID
-):
-    annotationId: ID = Field(validation_alias=AliasChoices("_id", "annotationId"))
+class _BaseCreateAnnotation(BaseModel):
     type: AnnotationType
     label: str
-    coordinates: Coordinates | Points
+
+
+class CreateClassificationAnnotation(_BaseCreateAnnotation):
+    type: Literal[AnnotationType.CLASSIFICATION] = AnnotationType.CLASSIFICATION
+
+
+class CreateObjectDetectionAnnotation(_BaseCreateAnnotation):
+    type: Literal[AnnotationType.OBJECT_DETECTION] = AnnotationType.OBJECT_DETECTION
+    bbox: BBox
+
+
+class CreateSegmentationAnnotation(_BaseCreateAnnotation):
+    type: Literal[AnnotationType.SEGMENTATION] = AnnotationType.SEGMENTATION
+    points: Polygon
+
+
+CreateAnnotation = Annotated[
+    CreateClassificationAnnotation
+    | CreateObjectDetectionAnnotation
+    | CreateSegmentationAnnotation,
+    Field(discriminator="type"),
+]
+
+
+class _BaseAnnotatation(
+    HasCreatedBy,
+    HasCreatedAt,
+    HasUpdatedAt,
+    HasProjectID,
+    HasFileID,
+    _BaseCreateAnnotation,
+    HasAnnotationID,
+):
+    annotationId: ID = Field(validation_alias=AliasChoices("_id", "annotationId"))
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
-class BoundingBoxAnnotation(BaseAnnotatation):
-    type: Literal[AnnotationType.BOUNDING_BOX] = AnnotationType.BOUNDING_BOX
-    coordinates: Coordinates
+class ClassificationAnnotation(_BaseAnnotatation, CreateClassificationAnnotation):
+    type: Literal[AnnotationType.CLASSIFICATION] = AnnotationType.CLASSIFICATION
 
 
-class PolygonAnnotation(BaseAnnotatation):
-    type: Literal[AnnotationType.POLYGON] = AnnotationType.POLYGON
-    coordinates: Points
+class ObjectDetectionAnnotation(_BaseAnnotatation, CreateObjectDetectionAnnotation):
+    type: Literal[AnnotationType.OBJECT_DETECTION] = AnnotationType.OBJECT_DETECTION
+
+
+class SegmentationAnnotation(_BaseAnnotatation, CreateSegmentationAnnotation):
+    type: Literal[AnnotationType.SEGMENTATION] = AnnotationType.SEGMENTATION
 
 
 Annotation = Annotated[
-    BoundingBoxAnnotation | PolygonAnnotation, Field(discriminator="type")
+    ClassificationAnnotation | ObjectDetectionAnnotation | SegmentationAnnotation,
+    Field(discriminator="type"),
 ]
+
+
+def get_annotation_model(annotation_type: str | AnnotationType) -> type[Annotation]:
+    """Returns an Annotation type based on an annotation type.
+
+    Args:
+        annotation_type: The type for which to get the associated Annotation model.
+
+    Returns:
+        The Annotation type that corresponds with `annotation_type`.
+    """
+    annotation_type = annotation_type.lower()
+    if annotation_type == AnnotationType.CLASSIFICATION:
+        return ClassificationAnnotation
+    elif annotation_type == AnnotationType.SEGMENTATION:
+        return SegmentationAnnotation
+    elif annotation_type == AnnotationType.OBJECT_DETECTION:
+        return ObjectDetectionAnnotation
+    raise ValueError(f"Could not find annotation model for type '{annotation_type}'")
 
 
 class UpdateAnnotation(BaseModel):
@@ -208,9 +260,29 @@ class UpdateAnnotation(BaseModel):
 
     label: str = ""
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
-    coordinates: Coordinates | Points = Points(
-        points=[Point(x=0, y=0), Point(x=0, y=0), Point(x=0, y=0)]
-    )
+    bbox: BBox | None = None
+    points: Polygon | None = None
+    type: AnnotationType | None = None
+
+    @model_validator(mode="after")
+    def verify_types(self):
+        has_bbox = self.bbox is not None
+        has_points = self.points is not None
+
+        if has_bbox and has_points:
+            raise ValueError(
+                "Cannot set both bbox and points! They are mutually exclusive."
+            )
+        elif (has_bbox or has_points) and self.type == AnnotationType.CLASSIFICATION:
+            raise ValueError(
+                "Cannot set bbox or points when explicitly converting annotation to classification!"
+            )
+        elif has_bbox:
+            self.type = AnnotationType.OBJECT_DETECTION
+        elif has_points:
+            self.type = AnnotationType.SEGMENTATION
+
+        return self
 
 
 # AUTH
@@ -270,6 +342,7 @@ FileMeta = Annotated[ImageMeta | VideoMeta | TextMeta, Field(discriminator="type
 class File(BaseModel):
     data: str
     metadata: FileMeta
+    annotations: list[Annotation]
 
 
 def get_filemeta_model(content_type: str) -> type[FileMeta]:
@@ -305,7 +378,7 @@ class ProjectMemberDetails(HasJoinedAt):
 
 class ProjectSettings(BaseModel):
     dataType: DataType
-    annotatationType: ProjectAnnotationType
+    annotatationType: AnnotationType
     isPublic: bool = False
     labels: list[str] = Field([])
 

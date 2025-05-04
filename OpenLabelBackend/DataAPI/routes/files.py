@@ -20,12 +20,6 @@ _section_name: Final[str] = "files"
 router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
 
 
-def create_project(
-    auth_token: models.TokenPayload = Depends(auth_user),
-) -> list[models.Project]:
-    pass
-
-
 @router.get("/{file_id}")
 def get_file_meta(
     file_id: models.ID,
@@ -114,4 +108,61 @@ def download_file(
     elif meta.contentType.startswith("text"):
         encoded_data = data.getvalue().decode("utf-8")
 
-    return models.File(data=encoded_data, metadata=meta)
+    annotations = db.annotation.get_annotations_by_file(file_id)
+
+    return models.File(data=encoded_data, metadata=meta, annotations=annotations)
+
+
+@router.get("/{file_id}/annotations")
+def get_file_annotations(
+    file_id: models.ID,
+    limit: int = 0,
+    auth_token: models.TokenPayload = Depends(auth_user),
+) -> list[models.Annotation]:
+    # TODO: auth?
+
+    return db.annotation.get_annotations_by_file(file_id, limit)
+
+
+@router.post("/{file_id}/annotations", status_code=status.HTTP_201_CREATED)
+def create_file_annotation(
+    file_id: models.ID,
+    annotation: models.CreateAnnotation,
+    auth_token: models.TokenPayload = Depends(auth_user),
+) -> models.HasAnnotationID:
+    # TODO: auth?
+
+    file_meta = db.file.get_file_by_id(file_id)
+
+    if file_meta is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"Image with ID '{str(file_id)}' not found"
+        )
+
+    annotation_id: models.ID
+
+    if annotation.type == models.AnnotationType.CLASSIFICATION:
+        annotation_id = db.annotation.create_classification_annotation(
+            file_id=file_id,
+            project_id=file_meta.projectId,
+            created_by=auth_token.userId,
+            label=annotation.label,
+        )
+    elif annotation.type == models.AnnotationType.OBJECT_DETECTION:
+        annotation_id = db.annotation.create_object_detection_annotation(
+            file_id=file_id,
+            project_id=file_meta.projectId,
+            created_by=auth_token.userId,
+            label=annotation.label,
+            bbox=annotation.bbox,
+        )
+    elif annotation.type == models.AnnotationType.SEGMENTATION:
+        annotation_id = db.annotation.create_segmentation_annotation(
+            file_id=file_id,
+            project_id=file_meta.projectId,
+            created_by=auth_token.userId,
+            label=annotation.label,
+            points=annotation.points,
+        )
+
+    return models.HasAnnotationID(annotationId=annotation_id)

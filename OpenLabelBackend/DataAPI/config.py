@@ -1,7 +1,8 @@
 import secrets
+from pathlib import Path
 from typing import Final
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class _Config(BaseSettings):
@@ -12,6 +13,9 @@ class _Config(BaseSettings):
     mongo_uri: str = "mongodb://localhost:27017"
     database_name: str = "openlabel_db"
     auth_secret_key: str = secrets.token_urlsafe(32)
+
+    # TODO: get env file setup
+    # model_config = SettingsConfigDict(env_file=Path("insert_path_here"))
 
 
 CONFIG: Final[_Config] = _Config()

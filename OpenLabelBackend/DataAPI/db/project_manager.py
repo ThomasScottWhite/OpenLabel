@@ -20,7 +20,7 @@ class ProjectManager:
         name: str,
         description: str,
         data_type: models.DataType,
-        annotation_type: models.ProjectAnnotationType,
+        annotation_type: models.AnnotationType,
         created_by: ObjectId,
         labels: list[str],
         is_public: bool = False,

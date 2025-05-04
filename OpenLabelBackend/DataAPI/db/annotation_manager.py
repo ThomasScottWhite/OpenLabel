@@ -19,8 +19,10 @@ class AnnotationManager:
         self.file_man = file_manager
         self.fs = file_manager.fs
 
-    def _create_annotation(self, annotation: models.BaseAnnotatation) -> ObjectId:
-        result = self.db.annotations.insert_one(annotation.model_dump())
+    def _create_annotation(self, annotation: models.Annotation) -> ObjectId:
+        result = self.db.annotations.insert_one(
+            annotation.model_dump(exclude=["annotationId"])
+        )
 
         # Update image status
         self.db.images.update_one(
@@ -30,22 +32,26 @@ class AnnotationManager:
 
         return result.inserted_id
 
-    def create_bounding_box(
-        self,
-        image_id: ObjectId,
-        project_id: ObjectId,
-        label: str,
-        coordinates: models.Coordinates,
-        user_id: ObjectId,
-    ) -> ObjectId:
-        """Create a bounding box annotation"""
-
-        # Ensure the image exists
-        if not self.file_man.get_file_by_id(image_id):
-            raise exc.ResourceNotFound(f"Image with ID '{str(image_id)}' not found")
+    def _verify_existence(self, project_id: ObjectId, file: ObjectId):
+        # Ensure the file exists
+        if not self.file_man.get_file_by_id(file):
+            raise exc.ResourceNotFound(f"Image with ID '{str(file)}' not found")
 
         # Check if user has permission to annotate in this project
         _utils.project_exists(self.db, project_id, error=True)
+
+    def create_object_detection_annotation(
+        self,
+        file_id: ObjectId,
+        project_id: ObjectId,
+        label: str,
+        bbox: models.BBox,
+        created_by: ObjectId,
+    ) -> ObjectId:
+        """Create a bounding box annotation"""
+
+        # ensure existence of project and file
+        self._verify_existence(project_id, file_id)
 
         # Simple check that coordinates are within image bounds
         # if (
@@ -55,90 +61,132 @@ class AnnotationManager:
         #     or coordinates.y + coordinates.height > image["height"]
         # ):
         #     raise ValueError("Bounding box coordinates outside image bounds")
-
-        annotation = models.BoundingBoxAnnotation(
-            fileId=image_id,
+        annotation = models.ObjectDetectionAnnotation(
+            annotationId=ObjectId(),
+            fileId=file_id,
             projectId=project_id,
+            createdBy=created_by,
             label=label,
-            coordinates=coordinates,
-            createdBy=user_id,
             confidence=1.0,
+            bbox=bbox,
         )
 
         return self._create_annotation(annotation)
 
-    def create_polygon(
+    def create_segmentation_annotation(
         self,
-        image_id: ObjectId,
+        file_id: ObjectId,
         project_id: ObjectId,
+        created_by: ObjectId,
         label: str,
         points: list[models.Point],
-        user_id: ObjectId,
     ) -> ObjectId:
         """Create a polygon annotation"""
 
-        # Ensure the image exists
-        if not self.file_man.get_file_by_id(image_id):
-            raise exc.ResourceNotFound(f"Image with ID '{str(image_id)}' not found")
+        # ensure existence of project and file
+        self._verify_existence(project_id, file_id)
 
-        # Check if user has permission to annotate in this project
-        _utils.project_exists(self.db, project_id, error=True)
-
-        annotation = models.PolygonAnnotation(
-            fileId=image_id,
+        annotation = models.SegmentationAnnotation(
+            annotationId=ObjectId(),
+            fileId=file_id,
             projectId=project_id,
+            createdBy=created_by,
             label=label,
-            coordinates=models.Points(points=points),
-            createdBy=user_id,
+            points=points,
             confidence=1.0,
         )
 
         return self._create_annotation(annotation)
 
-    def get_annotations_by_file(self, image_id: ObjectId, limit: int = 0) -> list[dict]:
+    def create_classification_annotation(
+        self,
+        file_id: ObjectId,
+        project_id: ObjectId,
+        created_by: ObjectId,
+        label: str,
+    ) -> ObjectId:
+        """Create a polygon annotation"""
+
+        # ensure existence of project and file
+        self._verify_existence(project_id, file_id)
+
+        annotation = models.ClassificationAnnotation(
+            annotationId=ObjectId(),
+            fileId=file_id,
+            projectId=project_id,
+            createdBy=created_by,
+            label=label,
+            confidence=1.0,
+        )
+
+        return self._create_annotation(annotation)
+
+    def get_annotations_by_file(
+        self, file_id: ObjectId, limit: int = 0
+    ) -> list[models.Annotation]:
         """Get all annotations for an image"""
-        return list(self.db.annotations.find({"imageId": image_id}).limit(limit))
+        annotations = self.db.annotations.find({"fileId": file_id}).limit(limit)
+        return [
+            models.get_annotation_model(ann["type"]).model_validate(ann)
+            for ann in annotations
+        ]
 
     def get_annotations_by_project(
         self, project_id: ObjectId, limit: int = 0
-    ) -> list[dict]:
+    ) -> list[models.Annotation]:
         """Get all annotations in a project"""
-        return list(self.db.annotations.find({"projectId": project_id}).limit(limit))
+        annotations = self.db.annotations.find({"projectId": project_id}).limit(limit)
+        return [
+            models.get_annotation_model(ann["type"]).model_validate(ann)
+            for ann in annotations
+        ]
 
-    def get_annotation_by_id(self, annotation_id: ObjectId) -> dict[str, Any] | None:
+    def get_annotation_by_id(self, annotation_id: ObjectId) -> models.Annotation | None:
         """Gets a single annotation by ID"""
-        return self.db.annotations.find_one({"_id": annotation_id})
+        ann = self.db.annotations.find_one({"_id": annotation_id})
+
+        if ann is None:
+            return None
+
+        return models.get_annotation_model(ann["type"]).model_validate(ann)
 
     def update_annotation(
-        self, annotation_id: ObjectId, update_data: Mapping[str, Any]
+        self, annotation_id: ObjectId, update_data: models.UpdateAnnotation
     ) -> bool:
         """Update an annotation"""
 
-        annotation = self.db.annotations.find_one({"_id": annotation_id})
+        annotation = self.get_annotation_by_id(annotation_id)
         if not annotation:
             raise exc.ResourceNotFound(
                 f"Annotation with ID {str(annotation_id)} does not exist"
             )
 
         try:
-            update_data = models.UpdateAnnotation(**update_data).model_dump(
-                exclude_unset=True
-            )
+            update_data = update_data.model_dump(exclude_unset=True)
         except:
             raise exc.InvalidPatchMap("Invalid patch map.")
-
-        if "coordinates" in update_data:
-            if type(update_data["coordinates"]) is dict:
-                update_data["type"] = models.AnnotationType.BOUNDING_BOX.value
-            else:
-                update_data["type"] = models.AnnotationType.POLYGON.value
 
         # Update the updatedAt field
         update_data["updatedAt"] = datetime.datetime.now(datetime.timezone.utc)
 
-        result = self.db.annotations.update_one(
-            {"_id": annotation_id}, {"$set": update_data}
-        )
+        # do type conversion (both for "type" field and the annotation, if needed)
+        unset = {}
+        if "type" in update_data:
+            new_type = update_data["type"]
+            update_data["type"] = new_type.value
+
+            if new_type != annotation.type:
+                if annotation.type == models.AnnotationType.OBJECT_DETECTION:
+                    unset = {"bbox": ""}
+                elif annotation.type == models.AnnotationType.SEGMENTATION:
+                    unset = {"points": ""}
+
+        instruction = {"$set": update_data}
+
+        if unset:
+            instruction["$unset"] = unset
+
+        result = self.db.annotations.update_one({"_id": annotation_id}, instruction)
 
         return result.modified_count > 0
 
@@ -155,13 +203,13 @@ class AnnotationManager:
 
         # Check if this was the last annotation for the image
         annotations_count = self.db.annotations.count_documents(
-            {"imageId": annotation["imageId"]}
+            {"fileId": annotation["fileId"]}
         )
 
         if annotations_count == 0:
             # Update image status
             self.db.images.update_one(
-                {"_id": annotation["imageId"]},
+                {"_id": annotation["fileId"]},
                 {"$set": {"metadata.status": models.FileStatus.UNANNOTATED.value}},
             )
 
