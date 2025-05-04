@@ -4,13 +4,12 @@ import logging
 from io import BytesIO
 from typing import Any, Final
 
-from DataAPI import db
+from DataAPI import db, models
 from DataAPI.auth_utils import auth_user
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from .. import exceptions as exc
-from DataAPI import models
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class CreateProjectRequest(BaseModel):
     name: str
     description: str
     dataType: models.DataType
-    annotationType: models.ProjectAnnotationType
+    annotationType: models.AnnotationType
     isPublic: bool
     labels: list[str]
 
@@ -175,17 +174,14 @@ async def upload_images_to_project(
 ) -> list[models.FileMeta]:
     # TODO: do auth
 
-    print(f"Uploading {len(files)} files to project {project_id}")
-    print(files)
-    print(auth_token)
 
-    images: list[dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
 
     for file in files:
         contents = BytesIO(await file.read())
         await file.close()
 
-        images.append(
+        files.append(
             dict(
                 file=contents,
                 project_id=project_id,
@@ -195,4 +191,4 @@ async def upload_images_to_project(
             )
         )
 
-    return db.file.upload_files(images)
+    return db.file.upload_files(files)

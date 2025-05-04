@@ -63,7 +63,7 @@ class ExportManager:
                 coco_annotations.append(
                     {
                         "id": i + 1,
-                        "image_id": img_id_map[str(ann["imageId"])],
+                        "image_id": img_id_map[str(ann["fileId"])],
                         "category_id": label_map[ann["label"]],
                         "bbox": [x, y, w, h],
                         "area": w * h,
@@ -88,7 +88,7 @@ class ExportManager:
                 coco_annotations.append(
                     {
                         "id": i + 1,
-                        "image_id": img_id_map[str(ann["imageId"])],
+                        "image_id": img_id_map[str(ann["fileId"])],
                         "category_id": label_map[ann["label"]],
                         "bbox": [x, y, w, h],
                         "area": w * h,  # Approximate
@@ -138,7 +138,7 @@ class ExportManager:
         for image_id, image in image_map.items():
             # Get annotations for this image
             image_annotations = [
-                a for a in all_annotations if str(a["imageId"]) == image_id
+                a for a in all_annotations if str(a["fileId"]) == image_id
             ]
 
             # Format annotations for YOLO

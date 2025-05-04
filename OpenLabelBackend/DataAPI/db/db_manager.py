@@ -98,12 +98,12 @@ class MongoDBManager:
         )
 
         # Annotations collection indexes
-        self.db.annotations.create_index("imageId")
+        self.db.annotations.create_index("fileId")
         self.db.annotations.create_index(
             [("projectId", pymongo.ASCENDING), ("type", pymongo.ASCENDING)]
         )
         self.db.annotations.create_index(
-            [("imageId", pymongo.ASCENDING), ("label", pymongo.ASCENDING)]
+            [("fileId", pymongo.ASCENDING), ("label", pymongo.ASCENDING)]
         )
 
     def initialize_roles(self):
