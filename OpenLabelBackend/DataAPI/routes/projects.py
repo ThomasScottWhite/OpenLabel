@@ -69,10 +69,10 @@ def create_project(
 
 @router.get("/{project_id}")
 def get_project_by_id(
-    project_id: models.ID, auth_token: models.TokenPayload = Depends(auth_user)
+    project_id: models.ID
 ) -> models.ProjectWithFiles:
     # TODO: authentication?? should the user have to be part of the project to see it??
-
+    # auth_token: models.TokenPayload = Depends(auth_user)
     project = db.project.get_project_by_id(project_id)
 
     if project is None:

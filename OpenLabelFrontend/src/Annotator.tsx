@@ -27,32 +27,27 @@ export interface AnnotatorLayout {
 export interface ProjectFile {
   id: number;
   name: string;
-  description: string;
-  size: number;
-  type: string;
-  uploaded_at: string;
 }
 
-// Once the user selects a file, we fetch the data for that file
 export interface ProjectFileWithData extends ProjectFile {
-  data: string;
+  data: string; // base64 for images, raw string for text
+  annotations?: Annotation[];
 }
-
-// This defines the structure of the annotation, and is used for both classification and object detection
-interface BaseAnnotation {
+export interface BaseAnnotation {
   annotator: string;
   label: string;
 }
-// This defines the structure of the classification annotation
-// Honestly, this is a bit redundant, but it makes the code clearer
-interface ClassificationAnnotation extends BaseAnnotation {}
 
-// This defines the structure of the object detection annotation
-interface ObjectDetectionAnnotation extends BaseAnnotation {
+export interface ClassificationAnnotation extends BaseAnnotation {
+  type: "classification";
+}
+
+export interface ObjectDetectionAnnotation extends BaseAnnotation {
+  type: "object-detection";
   bbox: [number, number, number, number];
 }
 
-type Annotation = ClassificationAnnotation | ObjectDetectionAnnotation;
+export type Annotation = ClassificationAnnotation | ObjectDetectionAnnotation;
 
 const CANVAS_HEIGHT = 600;
 
@@ -105,7 +100,7 @@ const Annotator = () => {
     const fetchFileData = async () => {
       const fileId = files[currentIndex].id;
       const res = await fetch(`/api/projects/${id}/files/${fileId}`);
-      const data = await res.json();
+      const data: ProjectFileWithData = await res.json();
       setFileData(data);
 
       if (layout?.type === "image") {

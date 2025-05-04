@@ -61,18 +61,61 @@ const ProjectPage = () => {
       try {
         const res = await fetch(`/api/projects/${id}`);
         if (!res.ok) throw new Error("Failed to fetch project");
-        const data = await res.json();
+        const data: Project = await res.json();
         setProject(data);
         setFiles(data.files || []);
       } catch (err: any) {
+        console.error("Fetch error:", err);
         setError(err.message);
+
+        const demoProject: Project = {
+          id: 0,
+          name: "Demo Project",
+          description:
+            "This is fallback demo data shown when the project cannot be fetched.",
+          numFiles: 2,
+          numAnnotated: 1,
+          settings: {
+            dataType: "image",
+            annotationType: "object-detection",
+            isPublic: true,
+          },
+          members: [
+            {
+              userId: "demo-user",
+              roleId: "demo-role",
+              // username can be added when available from backend
+            },
+          ],
+          files: [
+            {
+              id: 1,
+              name: "demo_image.jpg",
+              description: "Sample image for demo purposes",
+              size: 204800,
+              type: "image/jpeg",
+              uploaded_at: new Date().toISOString(),
+            },
+            {
+              id: 2,
+              name: "demo_doc.txt",
+              description: "Sample text file for fallback",
+              size: 1024,
+              type: "text/plain",
+              uploaded_at: new Date().toISOString(),
+            },
+          ],
+        };
+
+        setProject(demoProject);
+        setFiles(demoProject.files);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProject();
   }, [id]);
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files;
     if (!selected) return;
