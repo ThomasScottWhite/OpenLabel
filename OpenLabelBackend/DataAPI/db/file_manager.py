@@ -113,8 +113,10 @@ class FileManager:
             ),
         )
 
-    def get_file_by_id(self, file_id: ObjectId) -> models.FileMeta | None:
-        for details in self.fs.find({"_id": file_id}).limit(-1):
+    def get_file_by_id(
+        self, file_id: ObjectId, session: ClientSession | None = None
+    ) -> models.FileMeta | None:
+        for details in self.fs.find({"_id": file_id}, session).limit(-1):
             content_type = details.metadata["contentType"]
             return models.get_filemeta_model(content_type).from_grid_out(details)
         return None
