@@ -61,7 +61,7 @@ class AnnotationManager:
             exc.ResourceNotFound: If either the provided file or project does not exist.
         """
         # Ensure the file exists
-        if not self.file_man.get_file_by_id(file_id):
+        if not self.file_man.get_file_by_id(file_id, session=session):
             raise exc.ResourceNotFound(f"Image with ID '{str(file_id)}' not found")
 
         # Check if user has permission to annotate in this project

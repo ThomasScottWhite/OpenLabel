@@ -97,17 +97,22 @@ class FileManager:
         )
 
     def _upload_files(
-        self, files: list[dict[str, Any]], session: ClientSession
+        self, files: list[dict[str, Any]], session: ClientSession | None
     ) -> list[models.FileMeta]:
         """Implementation of `upload_files`."""
         metas: list[models.FileMeta] = []
 
-        with session.start_transaction():
-            # TODO: batching would be epic here
-            # NOTE: we should probably remake everything using the asynchronous stuff eventually
+        if session:
+            with session.start_transaction():
+                for file in files:
+                    meta = self.upload_file(**file, session=session)
+                    metas.append(meta)
+        else:
             for file in files:
-                meta = self.upload_file(**file, session=session)
+                meta = self.upload_file(**file, session=None)
                 metas.append(meta)
+
+        return metas
 
     def upload_files(
         self, files: list[dict[str, Any]], session: ClientSession | None = None
@@ -115,19 +120,14 @@ class FileManager:
         """Uploads multiple files at once.
 
         Args:
-            files: A list of dictionarys with keys and values compatible with the `upload_file` method.
+            files: A list of dictionaries with keys and values compatible with the `upload_file` method.
             session: The pymongo ClientSession to use. Defaults to None.
 
         Returns:
             A list of file metadatas corresponding to the uploaded files.
         """
+        return self._upload_files(files, session)
 
-        if not session:
-            # if the user doesn't provided a session, create our own
-            with self.client.start_session() as upload_sess:
-                return self._upload_files(files, upload_sess)
-        else:
-            return self._upload_files(files, session)
 
     def download_file(
         self, file_id: ObjectId
@@ -168,7 +168,7 @@ class FileManager:
             session: The pymongo ClientSession to use. Only applies to non-file system related queries
                 since GridFS does not support sessions.Defaults to None.
         """
-        for details in self.fs.find({"_id": file_id}, session).limit(-1):
+        for details in self.fs.find({"_id": file_id}, session=session).limit(-1):
             content_type = details.metadata["contentType"]
             return models.get_filemeta_model(content_type).from_grid_out(details)
         return None

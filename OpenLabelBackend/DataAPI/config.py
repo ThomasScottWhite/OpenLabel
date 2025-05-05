@@ -12,7 +12,7 @@ class _Config(BaseSettings):
 
     mongo_uri: str = "mongodb://localhost:27017"
     database_name: str = "openlabel_db"
-    auth_secret_key: str = secrets.token_urlsafe(32)
+    auth_secret_key: str = "mynamejeff" # TODO THIS NEED FIXED, IT KEEPS ON RESETTING secrets.token_urlsafe(32)
 
     # TODO: get env file setup
     # model_config = SettingsConfigDict(env_file=Path("insert_path_here"))

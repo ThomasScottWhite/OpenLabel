@@ -10,6 +10,9 @@ import {
   InputGroup,
   Spinner,
   Alert,
+  Tabs,
+  Tab,
+  Badge,
 } from "react-bootstrap";
 import { useRef, useState, useEffect } from "react";
 import ProjectFileTable from "./ProjectFileTable";
@@ -66,15 +69,29 @@ const ProjectPage = () => {
   const [filterValue, setFilterValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("files");
+  const [editedSettings, setEditedSettings] = useState<ProjectSettings | null>(
+    null
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
 
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const res = await fetch(`/api/projects/${id}`);
+        const res = await fetch(`/api/projects/${id}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
         if (!res.ok) throw new Error("Failed to fetch project");
         const data = await res.json();
         setProject(data);
         setFiles(data.files || []);
+        setEditedSettings(data.settings);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -83,6 +100,7 @@ const ProjectPage = () => {
     };
     fetchProject();
   }, [id]);
+
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -183,6 +201,71 @@ const ProjectPage = () => {
 
   const filteredFiles = files.filter(applyAdvancedFilter);
 
+  const handleSaveSettings = async () => {
+    if (!editedSettings) return;
+
+    setSaving(true);
+    setSaveError("");
+    setSaveSuccess(false);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ settings: editedSettings }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.detail || "Failed to update project settings"
+        );
+      }
+
+      // Update the project state with new settings
+      setProject({
+        ...project,
+        settings: editedSettings,
+      });
+      setSaveSuccess(true);
+
+      // Reset success message after 3 seconds
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setSaveError(err.message);
+      console.error("Error updating project settings:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddLabel = () => {
+    if (!newLabel.trim() || !editedSettings) return;
+
+    const updatedLabels = [...editedSettings.labels, newLabel.trim()];
+    setEditedSettings({
+      ...editedSettings,
+      labels: updatedLabels,
+    });
+    setNewLabel("");
+  };
+
+  const handleRemoveLabel = (labelToRemove: string) => {
+    if (!editedSettings) return;
+
+    const updatedLabels = editedSettings.labels.filter(
+      (label) => label !== labelToRemove
+    );
+    setEditedSettings({
+      ...editedSettings,
+      labels: updatedLabels,
+    });
+  };
+
   if (loading) {
     return (
       <Container className="py-5 text-center">
@@ -207,80 +290,226 @@ const ProjectPage = () => {
         <h4>Project Overview</h4>
         <p>{project.description}</p>
         <ProgressBar
-          now={(project.num_annotated / project.num_files) * 100}
+          now={(project.numAnnotated / project.numFiles) * 100}
           label={`${project.numAnnotated}/${project.numFiles} Annotated`}
         />
       </Card>
 
-      {/* Action Bar */}
-      <div className="d-flex justify-content-between flex-wrap align-items-end gap-2 mb-3">
-        <div className="d-flex gap-2 flex-wrap align-items-end">
-          <Button
-            variant="outline-primary"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            Upload File
-          </Button>
-          <Button
-            variant="outline-danger"
-            disabled={selectedFiles.length === 0}
-            onClick={handleDeleteSelected}
-          >
-            Delete Selected
-          </Button>
-          <Button
-            variant="outline-secondary"
-            disabled={selectedFiles.length === 0}
-            onClick={handleDownloadSelected}
-          >
-            Download Selected
-          </Button>
-        </div>
+      <Tabs
+        activeKey={activeTab}
+        onSelect={(k) => k && setActiveTab(k)}
+        className="mb-3"
+      >
+        <Tab eventKey="files" title="Files">
+          {/* Action Bar */}
+          <div className="d-flex justify-content-between flex-wrap align-items-end gap-2 mb-3">
+            <div className="d-flex gap-2 flex-wrap align-items-end">
+              <Button
+                variant="outline-primary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Upload File
+              </Button>
+              <Button
+                variant="outline-danger"
+                disabled={selectedFiles.length === 0}
+                onClick={handleDeleteSelected}
+              >
+                Delete Selected
+              </Button>
+              <Button
+                variant="outline-secondary"
+                disabled={selectedFiles.length === 0}
+                onClick={handleDownloadSelected}
+              >
+                Download Selected
+              </Button>
+            </div>
 
-        {/* Advanced Filter */}
-        <InputGroup className="w-auto">
-          <Form.Select
-            value={filterColumn}
-            onChange={(e) => setFilterColumn(e.target.value)}
-          >
-            <option value="size">Size (KB)</option>
-            <option value="name">Name</option>
-            <option value="type">Type</option>
-          </Form.Select>
-          <Form.Select
-            value={filterCondition}
-            onChange={(e) => setFilterCondition(e.target.value)}
-          >
-            <option value=">">&gt;</option>
-            <option value="<">&lt;</option>
-            <option value="=">=</option>
-          </Form.Select>
+            {/* Advanced Filter */}
+            <InputGroup className="w-auto">
+              <Form.Select
+                value={filterColumn}
+                onChange={(e) => setFilterColumn(e.target.value)}
+              >
+                <option value="size">Size (KB)</option>
+                <option value="name">Name</option>
+                <option value="type">Type</option>
+              </Form.Select>
+              <Form.Select
+                value={filterCondition}
+                onChange={(e) => setFilterCondition(e.target.value)}
+              >
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="=">=</option>
+              </Form.Select>
+              <Form.Control
+                placeholder="Filter value"
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+              />
+            </InputGroup>
+
+            <Button variant="success" href={`/projects/${id}/annotator`}>
+              Launch Annotator
+            </Button>
+          </div>
+
+          {/* Hidden File Input */}
           <Form.Control
-            placeholder="Filter value"
-            value={filterValue}
-            onChange={(e) => setFilterValue(e.target.value)}
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            multiple
+            style={{ display: "none" }}
           />
-        </InputGroup>
 
-        <Button variant="success" href={`/projects/${id}/annotator`}>
-          Launch Annotator
-        </Button>
-      </div>
+          {/* File Table */}
+          <ProjectFileTable
+            files={filteredFiles}
+            onSelectionChange={setSelectedFiles}
+          />
+        </Tab>
 
-      {/* Hidden File Input */}
-      <Form.Control
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileUpload}
-        multiple
-        style={{ display: "none" }}
-      />
+        <Tab eventKey="settings" title="Settings">
+          <Card className="p-3">
+            <h4 className="mb-4">Project Settings</h4>
 
-      {/* File Table */}
-      <ProjectFileTable
-        files={filteredFiles}
-        onSelectionChange={setSelectedFiles}
-      />
+            {saveSuccess && (
+              <Alert variant="success">Settings saved successfully!</Alert>
+            )}
+
+            {saveError && <Alert variant="danger">Error: {saveError}</Alert>}
+
+            {editedSettings && (
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label>Data Type</Form.Label>
+                  <Form.Select
+                    value={editedSettings.dataType}
+                    onChange={(e) =>
+                      setEditedSettings({
+                        ...editedSettings,
+                        dataType: e.target.value as "image" | "text",
+                      })
+                    }
+                  >
+                    <option value="image">Image</option>
+                    <option value="text">Text</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Annotation Type</Form.Label>
+                  <Form.Select
+                    value={editedSettings.annotationType}
+                    onChange={(e) =>
+                      setEditedSettings({
+                        ...editedSettings,
+                        annotationType: e.target.value as
+                          | "object-detection"
+                          | "classification",
+                      })
+                    }
+                  >
+                    <option value="object-detection">Object Detection</option>
+                    <option value="classification">Classification</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    id="public-switch"
+                    label="Public Project"
+                    checked={editedSettings.isPublic}
+                    onChange={(e) =>
+                      setEditedSettings({
+                        ...editedSettings,
+                        isPublic: e.target.checked,
+                      })
+                    }
+                  />
+                  <Form.Text className="text-muted">
+                    Public projects can be seen by anyone.
+                  </Form.Text>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Labels</Form.Label>
+                  <div className="mb-2">
+                    {editedSettings.labels.length === 0 ? (
+                      <p className="text-muted">No labels defined yet.</p>
+                    ) : (
+                      <div className="d-flex flex-wrap gap-2">
+                        {editedSettings.labels.map((label, idx) => (
+                          <Badge
+                            key={idx}
+                            bg="primary"
+                            className="p-2 d-flex align-items-center"
+                          >
+                            {label}
+                            <Button
+                              variant="link"
+                              className="p-0 ps-2 text-white"
+                              onClick={() => handleRemoveLabel(label)}
+                            >
+                              ✕
+                            </Button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <InputGroup>
+                    <Form.Control
+                      placeholder="Add new label"
+                      value={newLabel}
+                      onChange={(e) => setNewLabel(e.target.value)}
+                      onKeyPress={(e) =>
+                        e.key === "Enter" &&
+                        (e.preventDefault(), handleAddLabel())
+                      }
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      onClick={handleAddLabel}
+                    >
+                      Add
+                    </Button>
+                  </InputGroup>
+                </Form.Group>
+
+                <div className="d-flex justify-content-end mt-4">
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveSettings}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <>
+                        <Spinner
+                          as="span"
+                          animation="border"
+                          size="sm"
+                          role="status"
+                          aria-hidden="true"
+                          className="me-2"
+                        />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Settings"
+                    )}
+                  </Button>
+                </div>
+              </Form>
+            )}
+          </Card>
+        </Tab>
+      </Tabs>
     </Container>
   );
 };

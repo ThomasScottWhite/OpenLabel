@@ -159,12 +159,14 @@ def get_project_images(
     limit: int = 0,
 ) -> list[models.FileMeta]:
     # TODO: do auth
-
     try:
         return db.file.get_files_by_project(project_id, limit)
     except exc.ResourceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
 
+
+from io import BytesIO
+from typing import Any
 
 @router.post("/{project_id}/files", status_code=status.HTTP_201_CREATED)
 async def upload_images_to_project(
@@ -174,14 +176,13 @@ async def upload_images_to_project(
 ) -> list[models.FileMeta]:
     # TODO: do auth
 
-
-    files: list[dict[str, Any]] = []
+    prepared_files: list[dict[str, Any]] = []
 
     for file in files:
         contents = BytesIO(await file.read())
         await file.close()
 
-        files.append(
+        prepared_files.append(
             dict(
                 file=contents,
                 project_id=project_id,
@@ -191,4 +192,4 @@ async def upload_images_to_project(
             )
         )
 
-    return db.file.upload_files(files)
+    return db.file.upload_files(prepared_files)

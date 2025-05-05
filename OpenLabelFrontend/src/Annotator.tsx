@@ -27,15 +27,24 @@ export interface AnnotatorLayout {
 export interface ProjectFile {
   id: number;
   name: string;
+  filename: string;
+  fileId: string;
+  contentType: string;
+  status: string;
+  size: number;
 }
 
 export interface ProjectFileWithData extends ProjectFile {
   data: string; // base64 for images, raw string for text
   annotations?: Annotation[];
 }
+
 export interface BaseAnnotation {
   annotator: string;
   label: string;
+  annotationId?: string;
+  projectId?: string;
+  fileId?: string;
 }
 
 export interface ClassificationAnnotation extends BaseAnnotation {
@@ -68,25 +77,65 @@ const Annotator = () => {
     width: 0,
     height: CANVAS_HEIGHT,
   });
+  // Track if there are unsaved changes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Track saving state for UI feedback
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  };
 
   // Fetch the layout and files when the component mounts
   useEffect(() => {
     if (!id) return;
 
     const fetchLayout = async () => {
-      const res = await fetch(`/api/projects/${id}/annotator_layout`);
-      const data: AnnotatorLayout = await res.json();
-      setLayout(data);
-      setActiveLabel(data.labels[0] || "");
+      try {
+        // Get project to extract data type and annotation type
+        const projectRes = await fetch(`/api/projects/${id}`, {
+          headers: getAuthHeaders(),
+        });
+        if (!projectRes.ok) {
+          throw new Error(`Failed to fetch project: ${projectRes.statusText}`);
+        }
+        const projectData = await projectRes.json();
+
+        // Create annotator layout from project settings
+        const annotatorLayout: AnnotatorLayout = {
+          type: projectData.settings.dataType,
+          layout: projectData.settings.annotatationType,
+          labels: projectData.settings.labels || [],
+        };
+
+        setLayout(annotatorLayout);
+        setActiveLabel(annotatorLayout.labels[0] || "");
+      } catch (error) {
+        console.error("Error fetching layout:", error);
+      }
     };
 
     const fetchFiles = async () => {
-      const res = await fetch(`/api/projects/${id}/files`);
-      const data: ProjectFile[] = await res.json();
-      setFiles(data);
-      setAnnotations(Array(data.length).fill([]));
-      setImageLabels(Array(data.length).fill("unknown"));
-      setTextLabels(Array(data.length).fill("unknown"));
+      try {
+        const res = await fetch(`/api/projects/${id}/files`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch files: ${res.statusText}`);
+        }
+        const data: ProjectFile[] = await res.json();
+        setFiles(data);
+        setAnnotations(Array(data.length).fill([]));
+        setImageLabels(Array(data.length).fill("unknown"));
+        setTextLabels(Array(data.length).fill("unknown"));
+      } catch (error) {
+        console.error("Error fetching files:", error);
+      }
     };
 
     fetchLayout();
@@ -98,55 +147,83 @@ const Annotator = () => {
     if (!files[currentIndex] || !id) return;
 
     const fetchFileData = async () => {
-      const fileId = files[currentIndex].id;
-      const res = await fetch(`/api/projects/${id}/files/${fileId}`);
-      const data: ProjectFileWithData = await res.json();
-      setFileData(data);
+      try {
+        const fileId = files[currentIndex].fileId;
+        // Using the download endpoint to get file data with annotations
+        const res = await fetch(`/api/files/${fileId}/download`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch file data: ${res.statusText}`);
+        }
+        const responseData = await res.json();
 
-      if (layout?.type === "image") {
-        const img = new Image();
-        img.src = `data:${data.type};base64,${data.data}`;
-        img.onload = () => setImage(img);
-      }
+        // Map the response to our expected format
+        const fileWithData: ProjectFileWithData = {
+          ...files[currentIndex],
+          data: responseData.data,
+          annotations: responseData.annotations || [],
+        };
 
-      const annotationsFromServer: Annotation[] = data.annotations || [];
+        setFileData(fileWithData);
+        // Reset unsaved changes flag when loading new file
+        setHasUnsavedChanges(false);
 
-      if (layout?.layout === "classification") {
-        if (layout.type === "text") {
-          // Text classification
-          setTextLabels((prev) => {
-            const newLabels = [...prev];
-            newLabels[currentIndex] =
-              annotationsFromServer[0]?.label || "unknown";
-            return newLabels;
-          });
-        } else if (layout.type === "image") {
-          // Image classification
-          setImageLabels((prev) => {
-            const newLabels = [...prev];
-            newLabels[currentIndex] =
-              annotationsFromServer[0]?.label || "unknown";
-            return newLabels;
+        if (layout?.type === "image") {
+          const img = new Image();
+          img.src = `data:${fileWithData.contentType};base64,${fileWithData.data}`;
+          img.onload = () => setImage(img);
+        }
+
+        const annotationsFromServer = responseData.annotations || [];
+
+        if (layout?.layout === "classification") {
+          const classificationAnnotations = annotationsFromServer.filter(
+            (ann: any) => ann.type === "classification"
+          );
+
+          if (layout.type === "text") {
+            // Text classification
+            setTextLabels((prev) => {
+              const newLabels = [...prev];
+              newLabels[currentIndex] =
+                classificationAnnotations[0]?.label || "unknown";
+              return newLabels;
+            });
+          } else if (layout.type === "image") {
+            // Image classification
+            setImageLabels((prev) => {
+              const newLabels = [...prev];
+              newLabels[currentIndex] =
+                classificationAnnotations[0]?.label || "unknown";
+              return newLabels;
+            });
+          }
+        } else if (layout?.layout === "object-detection") {
+          // Object detection
+          const objDetectionAnnotations = annotationsFromServer.filter(
+            (ann: any) => ann.type === "object-detection"
+          );
+
+          const boxes: BoundingBox[] = objDetectionAnnotations.map(
+            (ann: any, idx: number) => ({
+              id: ann.annotationId || `box-${idx}`,
+              label: ann.label,
+              x: ann.bbox.x,
+              y: ann.bbox.y,
+              width: ann.bbox.width,
+              height: ann.bbox.height,
+            })
+          );
+
+          setAnnotations((prev) => {
+            const newAnnotations = [...prev];
+            newAnnotations[currentIndex] = boxes;
+            return newAnnotations;
           });
         }
-      } else if (layout?.layout === "object-detection") {
-        // Object detection
-        const boxes: BoundingBox[] = annotationsFromServer
-          .filter((ann) => "bbox" in ann)
-          .map((ann, idx) => ({
-            id: `box-${idx}`,
-            label: ann.label,
-            x: ann.bbox[0],
-            y: ann.bbox[1],
-            width: ann.bbox[2],
-            height: ann.bbox[3],
-          }));
-
-        setAnnotations((prev) => {
-          const newAnnotations = [...prev];
-          newAnnotations[currentIndex] = boxes;
-          return newAnnotations;
-        });
+      } catch (error) {
+        console.error("Failed to fetch file data:", error);
       }
     };
 
@@ -170,119 +247,168 @@ const Annotator = () => {
 
   // Handle box change for object detection
   // This is called when the user draws a new box or moves an existing one
-  const handleBoxChange = async (updated: BoundingBox[]) => {
+  const handleBoxChange = (updated: BoundingBox[]) => {
     const newAnnotations = [...annotations];
     newAnnotations[currentIndex] = updated;
     setAnnotations(newAnnotations);
-
-    if (!id || !files[currentIndex]) return;
-
-    try {
-      await fetch(
-        `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ annotations: updated }),
-        }
-      );
-    } catch (error) {
-      console.error("Failed to update annotations:", error);
-    }
+    setHasUnsavedChanges(true);
   };
 
   // Handle label change for classification
   // This is called when the user selects a new label from the button group
-  const handleLabelChange = async (label: string) => {
+  const handleLabelChange = (label: string) => {
     setActiveLabel(label);
 
+    if (!fileData) return;
+
     if (layout?.layout === "object-detection" && selectedBoxId) {
+      // For object detection, update the label of the selected box
       const updated = [...annotations];
       updated[currentIndex] = updated[currentIndex].map((box) =>
         box.id === selectedBoxId ? { ...box, label } : box
       );
       setAnnotations(updated);
-
-      if (!id || !files[currentIndex]) return;
-
-      try {
-        await fetch(
-          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ annotations: updated[currentIndex] }),
-          }
-        );
-      } catch (error) {
-        console.error("Failed to update label:", error);
-      }
-    } else if (
-      layout?.layout === "classification" &&
-      layout?.type === "image"
-    ) {
-      const updated = [...imageLabels];
-      updated[currentIndex] = label;
-      setImageLabels(updated);
-
-      if (!id || !files[currentIndex]) return;
-
-      try {
-        await fetch(
-          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              annotations: [{ annotator: "user@example.com", label }],
-            }),
-          }
-        );
-      } catch (error) {
-        console.error("Failed to update image classification label:", error);
-      }
-    } else if (layout?.layout === "classification" && layout?.type === "text") {
-      const updated = [...textLabels];
-      updated[currentIndex] = label;
-      setTextLabels(updated);
-
-      if (!id || !files[currentIndex]) return;
-
-      try {
-        await fetch(
-          `/api/projects/${id}/files/${files[currentIndex].id}/annotations`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              annotations: [{ annotator: "user@example.com", label }],
-            }),
-          }
-        );
-      } catch (error) {
-        console.error("Failed to update text classification label:", error);
+      setHasUnsavedChanges(true);
+    } else if (layout?.layout === "classification") {
+      if (layout.type === "image") {
+        const updated = [...imageLabels];
+        updated[currentIndex] = label;
+        setImageLabels(updated);
+        setHasUnsavedChanges(true);
+      } else if (layout.type === "text") {
+        const updated = [...textLabels];
+        updated[currentIndex] = label;
+        setTextLabels(updated);
+        setHasUnsavedChanges(true);
       }
     }
   };
 
   // Handle delete for object detection
-  // This is called when the user clicks the delete button
   const handleDelete = () => {
     if (!selectedBoxId) return;
+
+    // Update the local state
     const updated = [...annotations];
     updated[currentIndex] = updated[currentIndex].filter(
       (b) => b.id !== selectedBoxId
     );
     setAnnotations(updated);
     setSelectedBoxId(null);
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle saving annotations to the server
+  const handleSaveAnnotations = async () => {
+    if (!id || !fileData) return;
+
+    setIsSaving(true);
+    try {
+      const fileId = fileData.fileId;
+
+      if (layout?.layout === "object-detection") {
+        // Delete all existing annotations for this file first
+        const existingAnnotations = fileData.annotations || [];
+        for (const ann of existingAnnotations) {
+          if (ann.annotationId && ann.type === "object-detection") {
+            await fetch(`/api/annotations/${ann.annotationId}`, {
+              method: "DELETE",
+              headers: getAuthHeaders(),
+            });
+          }
+        }
+
+        // Create new annotations for each bounding box
+        const currentBoxes = annotations[currentIndex] || [];
+        for (const box of currentBoxes) {
+          const annotation = {
+            type: "object-detection",
+            label: box.label,
+            bbox: {
+              x: box.x,
+              y: box.y,
+              width: box.width,
+              height: box.height,
+            },
+          };
+
+          await fetch(`/api/files/${fileId}/annotations`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+            body: JSON.stringify(annotation),
+          });
+        }
+      } else if (layout?.layout === "classification") {
+        // Delete existing classification annotations for this file
+        const existingAnnotations = fileData.annotations || [];
+        for (const ann of existingAnnotations) {
+          if (ann.annotationId && ann.type === "classification") {
+            await fetch(`/api/annotations/${ann.annotationId}`, {
+              method: "DELETE",
+              headers: getAuthHeaders(),
+            });
+          }
+        }
+
+        // Create a new classification annotation
+        let label = "";
+        if (layout.type === "image") {
+          label = imageLabels[currentIndex];
+        } else if (layout.type === "text") {
+          label = textLabels[currentIndex];
+        }
+
+        if (label && label !== "unknown") {
+          const annotation = {
+            type: "classification",
+            label,
+          };
+
+          await fetch(`/api/files/${fileId}/annotations`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+            body: JSON.stringify(annotation),
+          });
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      // Fetch updated annotations to refresh the view
+      const res = await fetch(`/api/files/${fileId}/download`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const responseData = await res.json();
+        setFileData({
+          ...fileData,
+          annotations: responseData.annotations || [],
+        });
+      }
+    } catch (error) {
+      console.error("Failed to save annotations:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Display a confirmation dialog when navigating away with unsaved changes
+  const handleFileChange = (index: number) => {
+    if (hasUnsavedChanges) {
+      if (
+        window.confirm(
+          "You have unsaved changes. Do you want to save before changing files?"
+        )
+      ) {
+        handleSaveAnnotations().then(() => {
+          setCurrentIndex(index);
+        });
+      } else {
+        setCurrentIndex(index);
+        setHasUnsavedChanges(false);
+      }
+    } else {
+      setCurrentIndex(index);
+    }
   };
 
   const currentBoxes = annotations[currentIndex] || [];
@@ -299,12 +425,12 @@ const Annotator = () => {
             <ListGroup>
               {files.map((file, index) => (
                 <ListGroup.Item
-                  key={file.id}
+                  key={file.fileId}
                   active={index === currentIndex}
                   action
-                  onClick={() => setCurrentIndex(index)}
+                  onClick={() => handleFileChange(index)}
                 >
-                  {isText ? `Text ${index + 1}` : file.name}
+                  {isText ? `Text ${index + 1}` : file.filename}
                 </ListGroup.Item>
               ))}
             </ListGroup>
@@ -348,31 +474,46 @@ const Annotator = () => {
                 />
               )}
 
-            <div className="mt-3 d-flex justify-content-center align-items-center gap-2 flex-wrap">
-              <strong>Label:</strong>
-              <ButtonGroup>
-                {labelOptions.map((label) => (
+            <div className="mt-3 d-flex justify-content-between align-items-center flex-wrap">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <strong>Label:</strong>
+                <ButtonGroup>
+                  {labelOptions.map((label) => (
+                    <Button
+                      key={label}
+                      variant={
+                        activeLabel === label ? "primary" : "outline-primary"
+                      }
+                      onClick={() => handleLabelChange(label)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+                {annotationType === "object-detection" && (
                   <Button
-                    key={label}
-                    variant={
-                      activeLabel === label ? "primary" : "outline-primary"
-                    }
-                    onClick={() => handleLabelChange(label)}
+                    variant="danger"
+                    onClick={handleDelete}
+                    disabled={!selectedBoxId}
                   >
-                    {label}
+                    Delete Selected
                   </Button>
-                ))}
-              </ButtonGroup>
-              {annotationType === "object-detection" && (
-                <Button
-                  variant="danger"
-                  onClick={handleDelete}
-                  disabled={!selectedBoxId}
-                >
-                  Delete Selected
-                </Button>
-              )}
+                )}
+              </div>
+
+              <Button
+                variant="success"
+                onClick={handleSaveAnnotations}
+                disabled={isSaving || !hasUnsavedChanges}
+              >
+                {isSaving ? "Saving..." : "Save Annotations"}
+              </Button>
             </div>
+            {hasUnsavedChanges && (
+              <div className="mt-2 text-warning">
+                <small>You have unsaved changes</small>
+              </div>
+            )}
           </Card>
         </Col>
 
