@@ -16,7 +16,7 @@ from .db_manager import MongoDBManager
 from .file_manager import FileManager
 
 
-class _Exporter(abc.ABC):
+class _ExportStrategy(abc.ABC):
 
     def __init__(
         self,
@@ -31,13 +31,28 @@ class _Exporter(abc.ABC):
         self.ann_man = annotation_manager
 
     @abc.abstractmethod
-    def _export(self, project: models.Project, zip_file: zipfile.ZipFile): ...
+    def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
+        """Implementation of the export format."""
+        ...
 
     @property
     @abc.abstractmethod
     def export_format(self) -> models.ExportFormat: ...
 
     def export(self, project_id: ObjectId, directory: str | None = None) -> Path:
+        """Exports the specified project as a ZIP file, saving it to `directory`.
+
+        Args:
+            project_id: The ID of the project to export.
+            directory: The directory to save the resultant ZIP file. If None, defaults to CONFIG.temp_dir.
+                Defaults to None.
+
+        Raises:
+            exc.ResourceNotFound: If the specified project does not exist.
+
+        Returns:
+            The Path to the created ZIP file.
+        """
         project = self.db.projects.find_one({"_id": project_id})
         if not project:
             raise exc.ResourceNotFound("Project not found")
@@ -49,23 +64,37 @@ class _Exporter(abc.ABC):
 
         now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M")
 
+        # filename format: {project_id}_{export_format}_{timestamp}.zip
         zip_path = (
             Path(CONFIG.temp_dir)
             / f"{str(project.projectId)}_{self.export_format.value}_{now_str}.zip"
         )
         zip_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # wrap in try block to delete created file upon error
         try:
             with zipfile.ZipFile(zip_path, "w") as file:
                 self._export(project, file)
         except:
-            zip_path.unlink()
+            zip_path.unlink(missing_ok=True)
             raise
 
         return zip_path
 
 
-class _COCOExporter(_Exporter):
+class _COCOExporter(_ExportStrategy):
+    """Exports data in the COCO format:
+
+    /
+      img1.ext
+      img2.ext
+      img3.ext
+      ...
+      manifest.json
+
+    manifest.json follows the COCO format:
+    https://docs.aws.amazon.com/rekognition/latest/customlabels-dg/md-coco-overview.html
+    """
 
     @property
     def export_format(self) -> models.ExportFormat:
@@ -77,6 +106,16 @@ class _COCOExporter(_Exporter):
         project: models.Project,
         manifest: dict[str, Any],
     ) -> dict[str, tuple[models.FileMeta, int]]:
+        """Exports a project's images in the COCO format.
+
+        Args:
+            zip_file: The ZipFile to add the image files to. Files are named based on their FileID.
+            project: The project to export.
+            manifest: The COCO manifest dict to write an "images" section to.
+
+        Returns:
+            A Mapping mapping File ID to a pair containing that file's meta and the generate COCO image ID.
+        """
         files = self.file_man.get_files_by_project(project.projectId)
 
         image_map: dict[str, tuple[models.FileMeta, int]] = {}
@@ -118,6 +157,16 @@ class _COCOExporter(_Exporter):
         image_map: dict[str, tuple[models.FileMeta, int]],
         manifest: dict[str, Any],
     ):
+        """Exports a projects annotations in COCO format, adding them to `manifest`.
+
+        Args:
+            project: The project being exported.
+            image_map: A Mapping from File ID to a pair (FileMeta, COCO image ID). Is the same as what's returned by `self._export_images`.
+            manifest: The manifest dict to write the annotations to.
+
+        Raises:
+            NotImplementedError: If a specific annotation type is not supported.
+        """
         raw_annotations = self.ann_man.get_annotations_by_project(project.projectId)
 
         categories = []
@@ -169,6 +218,12 @@ class _COCOExporter(_Exporter):
         manifest["categories"] = categories
 
     def _export_info(self, project: models.Project, manifest: dict[str, Any]):
+        """Adds info section to `manifest`.
+
+        Args:
+            project: The project to export.
+            manifest: The manifest dict to add info to.
+        """
         info = {
             "year": datetime.datetime.now().year,
             "version": "1.0",
@@ -180,12 +235,7 @@ class _COCOExporter(_Exporter):
         manifest["info"] = info
 
     def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
-        # Get all images in project
-
-        # Get all annotations in project
-
-        # Construct final COCO format
-
+        # COCO manifest JSON
         manifest = {}
 
         self._export_info(project, manifest)
@@ -195,7 +245,7 @@ class _COCOExporter(_Exporter):
         zip_file.writestr("manifest.json", json.dumps(manifest, indent=2))
 
 
-class _YOLOExporter(_Exporter):
+class _YOLOExporter(_ExportStrategy):
 
     @property
     def export_format(self) -> models.ExportFormat:
@@ -296,7 +346,18 @@ class _YOLOExporter(_Exporter):
         return yolo_annotations
 
 
-class _ClassificationExporter(_Exporter):
+class _ClassificationExporter(_ExportStrategy):
+    """Exports in the following format:
+
+    data/
+      classname1/
+        datafile_marked_as_classname1_1.ext
+        datafile_marked_as_classname1_2.ext
+        ...
+      classname1/
+        datafile_marked_as_classname2_2.ext
+      ...
+    """
 
     @property
     def export_format(self) -> models.ExportFormat:
@@ -350,7 +411,7 @@ class ExportManager:
             The Path to the created ZIP file containing the exported data.
         """
 
-        exporter: _Exporter
+        exporter: _ExportStrategy
 
         if format == models.ExportFormat.COCO:
             exporter = _COCOExporter(self.db, self.file_man, self.ann_man)
