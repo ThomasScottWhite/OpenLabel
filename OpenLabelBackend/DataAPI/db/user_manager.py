@@ -34,6 +34,7 @@ class UserManager:
         Args:
             role_name: The name of the role for which to fetch the ID.
         """
+        # TODO: replace with new role tech when its created
         role = self.db.roles.find_one({"name": role_name})
         if not role:
             return None

@@ -14,6 +14,7 @@ class ProjectManager:
     def __init__(self, db_manager: MongoDBManager):
         """Initialize with database manager"""
         self.db = db_manager.db
+        self.man = db_manager
 
     def create_project(
         self,
@@ -42,7 +43,7 @@ class ProjectManager:
             members=[
                 models.ProjectMember(
                     userId=created_by,
-                    roleId=self.db.roles.find_one({"name": "admin"})["_id"],
+                    roleId=self.man.get_role_by_name(models.RoleName.ADMIN).roleId,
                 ),
             ],
             settings=models.ProjectSettings(
@@ -103,18 +104,22 @@ class ProjectManager:
             )
 
         # Check if user is a member with admin or project_manager role
-        has_permission = False
-        for member in project.members:
-            if member.userId == user_id:
-                role = self.db.roles.find_one({"_id": member.roleId})
-                if role and role["name"] in ["admin", "project_manager"]:
-                    has_permission = True
-                    break
+        # TODO: revamp permissions
+        # has_permission = False
+        # for member in project.members:
+        #     if member.userId == user_id:
+        #         role = self.man.get_role_by_id(member.roleId)
+        #         if role and role.name in [
+        #             models.RoleName.ADMIN,
+        #             models.RoleName.PROJECT_MANAGER,
+        #         ]:
+        #             has_permission = True
+        #             break
 
-        if not has_permission:
-            raise exc.PermissionError(
-                "User does not have permission to update this project"
-            )
+        # if not has_permission:
+        #     raise exc.PermissionError(
+        #         "User does not have permission to update this project"
+        #     )
 
         # Update settings if provided
         if "settings" in update_data:
@@ -177,19 +182,20 @@ class ProjectManager:
             raise exc.ResourceNotFound("Project not found")
 
         # Check if the adding user has permission
-        has_permission = False
-        for member in project["members"]:
-            if member["userId"] == added_by:
-                role = self.db.roles.find_one({"_id": member["roleId"]})
-                if role and role["name"] in ["admin", "project_manager"]:
-                    has_permission = (
-                        role_name == models.RoleName.ADMIN
-                        and role["name"] == models.RoleName.ADMIN
-                    ) or role_name != models.RoleName.ADMIN
-                    break
+        # TODO: revamp permissions
+        # has_permission = False
+        # for member in project["members"]:
+        #     if member["userId"] == added_by:
+        #         role = self.db.roles.find_one({"_id": member["roleId"]})
+        #         if role and role["name"] in ["admin", "project_manager"]:
+        #             has_permission = (
+        #                 role_name == models.RoleName.ADMIN
+        #                 and role["name"] == models.RoleName.ADMIN
+        #             ) or role_name != models.RoleName.ADMIN
+        #             break
 
-        if not has_permission:
-            raise exc.PermissionError("User does not have permission to add members")
+        # if not has_permission:
+        #     raise exc.PermissionError("User does not have permission to add members")
 
         # Check if user already a member
         for member in project["members"]:
@@ -197,7 +203,7 @@ class ProjectManager:
                 raise exc.UserAlreadyExists("User is already a member of this project")
 
         # Get role ID
-        role = self.db.roles.find_one({"name": role_name})
+        role = self.man.get_role_by_name(role_name)
         if not role:
             raise exc.RoleNotFound(f"Role '{role_name}' does not exist")
 
@@ -208,7 +214,7 @@ class ProjectManager:
                 "$push": {
                     "members": {
                         "userId": user_id,
-                        "roleId": role["_id"],
+                        "roleId": role.roleId,
                         "joinedAt": datetime.datetime.now(datetime.timezone.utc),
                     }
                 }
