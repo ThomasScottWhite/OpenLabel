@@ -266,7 +266,7 @@ class ProjectManager:
             role = self.db.roles.find_one({"_id": member.roleId})
 
             if user and role:
-                member.append(
+                members.append(
                     models.ProjectMemberDetails(
                         joinedAt=member.joinedAt,
                         user=models.UserNoPasswordWithID.model_validate(user),
