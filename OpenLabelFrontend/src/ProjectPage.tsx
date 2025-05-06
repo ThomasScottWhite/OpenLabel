@@ -77,6 +77,8 @@ const ProjectPage = () => {
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [newLabel, setNewLabel] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -266,6 +268,55 @@ const ProjectPage = () => {
     });
   };
 
+  const handleExportProject = async () => {
+    try {
+      setExporting(true);
+      setExportError("");
+
+      const token = localStorage.getItem("token");
+      const response = await fetch(`/api/projects/${id}/export`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to export project");
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = `project-${id}-export.zip`;
+      if (contentDisposition) {
+        const filenameMatch = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(
+          contentDisposition
+        );
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, "");
+        }
+      }
+
+      // Create a blob from the response
+      const blob = await response.blob();
+
+      // Create a download link and trigger the download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Error exporting project:", err);
+      setExportError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <Container className="py-5 text-center">
@@ -287,12 +338,43 @@ const ProjectPage = () => {
       <h1 className="mb-4">{project.name}</h1>
 
       <Card className="mb-4 p-3">
-        <h4>Project Overview</h4>
-        <p>{project.description}</p>
-        <ProgressBar
-          now={(project.numAnnotated / project.numFiles) * 100}
-          label={`${project.numAnnotated}/${project.numFiles} Annotated`}
-        />
+        <div className="d-flex justify-content-between align-items-start">
+          <div>
+            <h4>Project Overview</h4>
+            <p>{project.description}</p>
+            <ProgressBar
+              now={(project.numAnnotated / project.numFiles) * 100}
+              label={`${project.numAnnotated}/${project.numFiles} Annotated`}
+            />
+          </div>
+          <div>
+            <Button
+              variant="outline-success"
+              onClick={handleExportProject}
+              disabled={exporting || project.numFiles === 0}
+              className="ms-2"
+            >
+              {exporting ? (
+                <>
+                  <Spinner
+                    as="span"
+                    animation="border"
+                    size="sm"
+                    role="status"
+                    aria-hidden="true"
+                    className="me-2"
+                  />
+                  Exporting...
+                </>
+              ) : (
+                "Export Project"
+              )}
+            </Button>
+            {exportError && (
+              <div className="text-danger mt-2 small">{exportError}</div>
+            )}
+          </div>
+        </div>
       </Card>
 
       <Tabs

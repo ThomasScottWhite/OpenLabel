@@ -302,13 +302,6 @@ const ObjectDetectionAnnotator = ({
 
     // Add preview for drawing mode
     if (mode === "drawing" && startPoint.current) {
-      const {
-        x: offsetX,
-        y: offsetY,
-        width: imgW,
-        height: imgH,
-      } = imageDrawData.current || { x: 0, y: 0, width: 0, height: 0 };
-
       // Calculate the coordinates for the preview box
       const x = Math.min(startPoint.current.x, pos.x);
       const y = Math.min(startPoint.current.y, pos.y);
