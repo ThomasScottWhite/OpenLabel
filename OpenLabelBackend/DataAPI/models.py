@@ -145,13 +145,13 @@ class Permission(BaseModel):
     actions: list[CRUD]
 
 
-class Role(BaseModel):
-    name: str
+class BaseRole(BaseModel):
+    name: RoleName
     permissions: list[Permission]
     description: str
 
 
-class RoleWithID(Role, HasRoleID):
+class Role(BaseRole, HasRoleID):
     pass
 
 
@@ -380,7 +380,7 @@ class ProjectMember(HasUserID, HasRoleID, HasJoinedAt):
 
 class ProjectMemberDetails(HasJoinedAt):
     user: UserNoPasswordWithID
-    role: RoleWithID
+    role: Role
 
 
 class ProjectSettings(BaseModel):
