@@ -160,10 +160,10 @@ const ObjectDetectionAnnotator = ({
       const absH = box.height * imgH;
 
       const corners = [
-        { x: absX, y: absY }, // top-left
-        { x: absX + absW, y: absY }, // top-right
-        { x: absX, y: absY + absH }, // bottom-left
-        { x: absX + absW, y: absY + absH }, // bottom-right
+        { x: absX, y: absY },
+        { x: absX + absW, y: absY },
+        { x: absX, y: absY + absH },
+        { x: absX + absW, y: absY + absH },
       ];
 
       for (let i = 0; i < corners.length; i++) {
@@ -251,19 +251,15 @@ const ObjectDetectionAnnotator = ({
           let y1 = absY + absH;
 
           if (resizingCorner === 0) {
-            // top-left
             x0 = pos.x;
             y0 = pos.y;
           } else if (resizingCorner === 1) {
-            // top-right
             x1 = pos.x;
             y0 = pos.y;
           } else if (resizingCorner === 2) {
-            // bottom-left
             x0 = pos.x;
             y1 = pos.y;
           } else if (resizingCorner === 3) {
-            // bottom-right
             x1 = pos.x;
             y1 = pos.y;
           }

@@ -77,12 +77,9 @@ const Annotator = () => {
     width: 0,
     height: CANVAS_HEIGHT,
   });
-  // Track if there are unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  // Track saving state for UI feedback
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helper function to get auth headers
   const getAuthHeaders = () => {
     const token = localStorage.getItem("token");
     return {
@@ -91,13 +88,11 @@ const Annotator = () => {
     };
   };
 
-  // Fetch the layout and files when the component mounts
   useEffect(() => {
     if (!id) return;
 
     const fetchLayout = async () => {
       try {
-        // Get project to extract data type and annotation type
         const projectRes = await fetch(`/api/projects/${id}`, {
           headers: getAuthHeaders(),
         });
@@ -106,7 +101,6 @@ const Annotator = () => {
         }
         const projectData = await projectRes.json();
 
-        // Create annotator layout from project settings
         const annotatorLayout: AnnotatorLayout = {
           type: projectData.settings.dataType,
           layout: projectData.settings.annotatationType,

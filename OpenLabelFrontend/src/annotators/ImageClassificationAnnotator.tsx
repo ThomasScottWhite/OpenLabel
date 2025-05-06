@@ -1,4 +1,3 @@
-// ImageClassificationAnnotator.tsx
 import { useEffect, useRef } from "react";
 
 interface Props {
