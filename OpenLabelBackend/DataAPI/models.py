@@ -152,7 +152,7 @@ class BaseRole(BaseModel):
 
 
 class Role(BaseRole, HasRoleID):
-    pass
+    roleId: ID = Field(validation_alias=AliasChoices("_id", "roleId"))
 
 
 # ANNOTATIONS
@@ -392,12 +392,15 @@ class ProjectSettings(BaseModel):
     labels: list[str] = Field([])
 
 
-class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID):
-    projectId: ID = Field(validation_alias=AliasChoices("_id", "projectId"))
+class BaseProject(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
     name: str
     description: str
     settings: ProjectSettings
     members: list[ProjectMember]
+
+
+class Project(BaseProject, HasProjectID):
+    projectId: ID = Field(validation_alias=AliasChoices("_id", "projectId"))
 
 
 class ProjectWithFiles(Project):

@@ -140,9 +140,6 @@ class MongoDBManager:
         if raw_role is None:
             return None
 
-        # rename _id key to what Role expects
-        raw_role["roleId"] = raw_role.pop("_id")
-
         return Role.model_validate(raw_role)
 
     def get_role_by_id(self, role_id: ObjectId) -> Role | None:

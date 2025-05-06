@@ -145,8 +145,6 @@ def get_project_members(
 
     try:
         members = db.project.get_project_members(project_id)
-        for member in members:
-            member["role"]["roleId"] = member["role"].pop("_id")
 
         return members
     except exc.ResourceNotFound as e:

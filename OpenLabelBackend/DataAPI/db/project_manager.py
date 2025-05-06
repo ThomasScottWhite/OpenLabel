@@ -26,7 +26,23 @@ class ProjectManager:
         labels: list[str],
         is_public: bool = False,
     ) -> ObjectId:
-        """Create a new project"""
+        """Creates a new annotation project.
+
+        Args:
+            name: The name of the project. Must be unique to projects created by `created_by`.
+            description: The description of the project.
+            data_type: The data type used by the project.
+            annotation_type: The type of annotations used by the project.
+            created_by: The ID of the user creating the project.
+            labels: A list of categories/labels.
+            is_public: Whether the project will be publically visible. Defaults to False.
+
+        Raises:
+            exc.ProjectNameExists: If the provided `name` is already being used by the creating user.
+
+        Returns:
+            The ID of the created project.
+        """
         # Check if project name already exists for this user
         existing = self.db.projects.find_one({"name": name, "createdBy": created_by})
 
@@ -35,8 +51,7 @@ class ProjectManager:
                 f"Project '{name}' already exists for this user"
             )
 
-        project_doc = models.Project(
-            projectId=ObjectId(),
+        project_doc = models.BaseProject(
             name=name,
             description=description,
             createdBy=created_by,
@@ -54,13 +69,15 @@ class ProjectManager:
             ),
         )
 
-        result = self.db.projects.insert_one(
-            project_doc.model_dump(exclude=["projectId"])
-        )
+        result = self.db.projects.insert_one(project_doc.model_dump())
         return result.inserted_id
 
     def get_project_by_id(self, project_id: ObjectId) -> models.Project | None:
-        """Get project by ID"""
+        """Returns the specified project, or None if the project doesn't exist.
+
+        Args:
+            project_id: The ID of the project to fetch.
+        """
         project = self.db.projects.find_one({"_id": project_id})
         if project is None:
             return None
@@ -68,7 +85,11 @@ class ProjectManager:
         return models.Project.model_validate(project)
 
     def get_projects_by_user(self, user_id: ObjectId) -> list[models.Project]:
-        """Get projects where user is a member"""
+        """Fetches all project in which the specified user is a member.
+
+        Args:
+            user_id: The ID of the user in question.
+        """
         projects = self.db.projects.find({"members.userId": user_id})
         return [models.Project.model_validate(project) for project in projects]
 
@@ -78,9 +99,9 @@ class ProjectManager:
         """Update project information if user has permission
 
         Args:
-            project_id: _description_
-            update_data: _description_
-            user_id: _description_
+            project_id: The ID of the project to update.
+            update_data: A Mapping containing the fields to update.
+            user_id: The ID of the user attemping to update the project.
 
         Raises:
             ResourceNotFound: If the project was not found.
@@ -223,72 +244,39 @@ class ProjectManager:
 
         return result.modified_count > 0
 
-    def get_project_members(self, project_id: ObjectId) -> list[dict]:
-        """Get all members of a project with their roles"""
+    def get_project_members(
+        self, project_id: ObjectId
+    ) -> list[models.ProjectMemberDetails]:
+        """Returns the members of a project with additional details about the user and their role.
+
+        Args:
+            project_id: The ID of the project for which to fetch members.
+
+        Raises:
+            exc.ResourceNotFound: If the specified project does not exist.
+        """
         project = self.get_project_by_id(project_id)
 
         if not project:
             raise exc.ResourceNotFound("Project not found")
 
-        members = []
-        for member in project["members"]:
-            user = self.db.users.find_one({"_id": member["userId"]})
-            role = self.db.roles.find_one({"_id": member["roleId"]})
+        members: list[models.ProjectMemberDetails] = []
+        for member in project.members:
+            user = self.db.users.find_one({"_id": member.userId})
+            role = self.db.roles.find_one({"_id": member.roleId})
 
             if user and role:
-                members.append(
-                    {
-                        "user": user,
-                        "role": role,
-                        "joinedAt": member["joinedAt"],
-                    }
+                member.append(
+                    models.ProjectMemberDetails(
+                        joinedAt=member.joinedAt,
+                        user=models.UserNoPasswordWithID.model_validate(user),
+                        role=models.Role.model_validate(role),
+                    )
                 )
 
         return members
 
     def get_all_projects(self) -> list[models.Project]:
-        """Get all projects"""
+        """Returns all projects."""
         projects = self.db.projects.find()
         return [models.Project.model_validate(project) for project in projects]
-
-    def initalize_default_projects(self):
-        """Initialize default projects"""
-
-        default_admin = self.db.users.find_one({"username": "admin"})
-        if not default_admin:
-            raise ValueError("Admin user not found")
-
-        admin_id = default_admin["_id"]
-        try:
-            self.create_project(
-                name="Default Project 1",
-                description="This is a default project for image object-detection.",
-                created_by=admin_id,
-                is_public=True,
-                data_type="image",
-                annotation_type="object-detection",
-            )
-        except:
-            pass
-        try:
-            self.create_project(
-                name="Default Project 2",
-                description="This is a default project for text classification.",
-                created_by=admin_id,
-                is_public=True,
-                data_type="text",
-                annotation_type="classification",
-            )
-        except:
-            pass
-        try:
-            self.create_project(
-                name="Default Project 3",
-                description="This is a default project for image classification.",
-                created_by=admin_id,
-                is_public=True,
-                data_type="image",
-                annotation_type="classification",
-            )
-        except:
-            pass
