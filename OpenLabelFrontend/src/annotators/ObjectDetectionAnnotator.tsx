@@ -45,10 +45,16 @@ const ObjectDetectionAnnotator = ({
     null
   );
   const [resizingCorner, setResizingCorner] = useState<number | null>(null);
+  const [currentDrawingBox, setCurrentDrawingBox] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
 
   useEffect(() => {
     drawCanvas();
-  }, [image, annotations, width, height, selectedId]);
+  }, [image, annotations, width, height, selectedId, currentDrawingBox]);
 
   const drawCanvas = () => {
     const canvas = canvasRef.current;
@@ -75,6 +81,20 @@ const ObjectDetectionAnnotator = ({
       scale,
     };
     ctx.drawImage(image, offsetX, offsetY, imgW, imgH);
+
+    // Draw the currently drawing box (preview)
+    if (currentDrawingBox && mode === "drawing") {
+      ctx.strokeStyle = "cyan";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // Dashed line for preview
+      ctx.strokeRect(
+        currentDrawingBox.x,
+        currentDrawingBox.y,
+        currentDrawingBox.w,
+        currentDrawingBox.h
+      );
+      ctx.setLineDash([]); // Reset to solid lines for other boxes
+    }
 
     for (const box of annotations) {
       const absX = offsetX + box.x * imgW;
@@ -279,6 +299,25 @@ const ObjectDetectionAnnotator = ({
         })
       );
     }
+
+    // Add preview for drawing mode
+    if (mode === "drawing" && startPoint.current) {
+      const {
+        x: offsetX,
+        y: offsetY,
+        width: imgW,
+        height: imgH,
+      } = imageDrawData.current || { x: 0, y: 0, width: 0, height: 0 };
+
+      // Calculate the coordinates for the preview box
+      const x = Math.min(startPoint.current.x, pos.x);
+      const y = Math.min(startPoint.current.y, pos.y);
+      const w = Math.abs(pos.x - startPoint.current.x);
+      const h = Math.abs(pos.y - startPoint.current.y);
+
+      // Update the current drawing box
+      setCurrentDrawingBox({ x, y, w, h });
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -318,6 +357,7 @@ const ObjectDetectionAnnotator = ({
     startPoint.current = null;
     setDragOffset(null);
     setResizingCorner(null);
+    setCurrentDrawingBox(null); // Clear the drawing preview
   };
 
   return (
