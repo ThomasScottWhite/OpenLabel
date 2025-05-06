@@ -8,7 +8,7 @@ import {
   ButtonGroup,
 } from "react-bootstrap";
 import { useParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ObjectDetectionAnnotator, {
   BoundingBox,
 } from "./annotators/ObjectDetectionAnnotator";
@@ -391,6 +391,73 @@ const Annotator = () => {
     }
   };
 
+  // Handle saving and moving to next file
+  const handleSaveAndNext = async () => {
+    await handleSaveAnnotations();
+    if (currentIndex < files.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      // If we're at the last file, go back to the first one
+      setCurrentIndex(0);
+    }
+  };
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      // Ignore keyboard shortcuts when typing in input fields
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      // ~ key submits annotations and goes to the next file
+      if (e.key === "`" || e.key === "~") {
+        e.preventDefault();
+        handleSaveAndNext();
+      }
+
+      // Number keys 1-9 select the corresponding label
+      const num = parseInt(e.key);
+      if (!isNaN(num) && num >= 1 && num <= 9) {
+        e.preventDefault();
+        const labelIndex = num - 1;
+        if (layout?.labels && labelIndex < layout.labels.length) {
+          handleLabelChange(layout.labels[labelIndex]);
+        }
+      }
+
+      // Backspace/Delete key removes selected box in object detection mode
+      if (
+        (e.key === "Backspace" || e.key === "Delete") &&
+        layout?.layout === "object-detection" &&
+        selectedBoxId
+      ) {
+        e.preventDefault();
+        handleDelete();
+      }
+    },
+    [
+      currentIndex,
+      files.length,
+      layout,
+      selectedBoxId,
+      handleDelete,
+      handleSaveAndNext,
+      handleLabelChange,
+    ]
+  );
+
+  // Register and cleanup keyboard event listener
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleKeyDown]);
+
   // Display a confirmation dialog when navigating away with unsaved changes
   const handleFileChange = (index: number) => {
     if (hasUnsavedChanges) {
@@ -544,6 +611,26 @@ const Annotator = () => {
                 <strong>{imageLabels[currentIndex]}</strong>
               </p>
             )}
+          </Card>
+
+          <Card className="p-3 mb-3">
+            <h5>Keyboard Shortcuts</h5>
+            <ul
+              className="mb-0"
+              style={{ fontSize: "0.85rem", paddingLeft: "1rem" }}
+            >
+              <li>
+                <strong>~</strong>: Submit and next
+              </li>
+              <li>
+                <strong>1-9</strong>: Select label
+              </li>
+              {annotationType === "object-detection" && (
+                <li>
+                  <strong>Backspace</strong>: Delete selected box
+                </li>
+              )}
+            </ul>
           </Card>
         </Col>
       </Row>
