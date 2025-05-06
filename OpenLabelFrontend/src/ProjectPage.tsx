@@ -1,20 +1,18 @@
-import { useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import {
-  Container,
+  Alert,
+  Badge,
   Button,
-  ProgressBar,
   Card,
-  Row,
-  Col,
+  Container,
   Form,
   InputGroup,
+  ProgressBar,
   Spinner,
-  Alert,
-  Tabs,
   Tab,
-  Badge,
+  Tabs
 } from "react-bootstrap";
-import { useRef, useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import ProjectFileTable from "./ProjectFileTable";
 export interface ProjectFile {
   fileId: string;
@@ -132,6 +130,7 @@ const ProjectPage = () => {
 
       const result = await response.json();
       console.log("Uploaded files:", result);
+      setFiles([...files, ...result])
     } catch (err) {
       console.error("Error uploading files:", err);
     }
