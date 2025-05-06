@@ -119,6 +119,17 @@ def get_file_annotations(
     limit: int = 0,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.Annotation]:
+    """Returns a list of a file's annotations.
+
+    Args:
+        file_id: The ID of the file for which to fetch anotations.
+        limit: The maximum number of annotations to fetch. If 0, the limit is unset.
+            Defaults to 0.
+        auth_token: Auth token taken from the Authorization header.
+
+    Returns:
+        A list of annotations for the file
+    """
     # TODO: auth?
 
     return db.annotation.get_annotations_by_file(file_id, limit)
