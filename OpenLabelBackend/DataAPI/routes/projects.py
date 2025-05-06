@@ -200,7 +200,7 @@ async def upload_images_to_project(
 @router.get("/{project_id}/export")
 def get_project_images(
     project_id: models.ID,
-    # auth_token: models.TokenPayload = Depends(auth_user),
+    auth_token: models.TokenPayload = Depends(auth_user),
     format: models.ExportFormat | None = None,
 ) -> FileResponse:
     # TODO: do auth
@@ -223,8 +223,7 @@ def get_project_images(
     zip_path: Path | None = None
 
     try:
-        if format == models.ExportFormat.COCO:
-            zip_path = db.export.export_coco(project_id)
+        zip_path = db.export.export_project(project_id, format)
     except exc.ResourceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
     except NotImplementedError as e:

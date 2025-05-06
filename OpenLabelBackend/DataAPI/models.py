@@ -182,6 +182,8 @@ Polygon = Annotated[list[Point], Field(min_length=3)]
 
 class _BaseCreateAnnotation(BaseModel):
     type: AnnotationType
+
+    # TODO: validate labels to, like, only alphanumeric with underscores/dashes
     label: str
 
 
@@ -316,7 +318,6 @@ class _FileMetaBase(HasCreatedBy, HasCreatedAt, HasProjectID, HasFileID):
 
     @classmethod
     def from_grid_out(cls, grid_out: gridfs.GridOut) -> type[Self]:
-        print(grid_out.metadata, grid_out.filename)
         return cls(
             **grid_out.metadata,
             fileId=grid_out._id,
@@ -386,6 +387,8 @@ class ProjectSettings(BaseModel):
     dataType: DataType
     annotatationType: AnnotationType
     isPublic: bool = False
+
+    # TODO: validate labels to, like, only alphanumeric with underscores/dashes
     labels: list[str] = Field([])
 
 

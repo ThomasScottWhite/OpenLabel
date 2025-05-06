@@ -1,4 +1,5 @@
 import random
+import string
 from io import BytesIO
 from pathlib import Path
 
@@ -19,6 +20,7 @@ def init_test_data():
 
     admin_id = auth_utils.decode_token(token).userId
     project1_labels = ["bird", "cat", "dog", "lynx", "fish"]
+    project2_labels = ["happy", "sad", "glad", "disappointed", "mad"]
 
     project1_id = db.project.create_project(
         name="Default Project 1",
@@ -36,7 +38,7 @@ def init_test_data():
         is_public=True,
         data_type=models.DataType.TEXT,
         annotation_type=models.AnnotationType.CLASSIFICATION,
-        labels=["verb", "noun", "adverb"],
+        labels=project2_labels,
     )
     project3_id = db.project.create_project(
         name="Default Project 3",
@@ -53,6 +55,8 @@ def init_test_data():
     project1_files: list[models.FileMeta] = []
     project2_files: list[models.FileMeta] = []
     project3_files: list[models.FileMeta] = []
+
+    text = string.ascii_letters + string.digits + " "
 
     for filename in ("test_image1.png", "test_image2.png"):
         with open(image_folder / filename, "rb") as f:
@@ -76,6 +80,19 @@ def init_test_data():
             )
             project2_files.append(meta)
 
+    for i in range(100):
+        contents = "".join(random.choices(text, k=random.randint(100, 2000)))
+
+        with BytesIO(contents.encode()) as file:
+            meta = db.file.upload_file(
+                file,
+                project2_id,
+                admin_id,
+                f"random_text{i}.txt",
+                content_type="text/plain",
+            )
+            project2_files.append(meta)
+
     for filename in ("test_image3.png", "test_image4.png"):
         with open(image_folder / filename, "rb") as f:
             meta = db.file.upload_file(
@@ -91,26 +108,34 @@ def init_test_data():
     print(project2_files)
     print(project3_files)
 
-    for _ in range(200):
+    for file in project1_files:
+        for _ in range(random.randint(0, 10)):
 
-        file = random.choice(project1_files)
+            bbox = models.BBox(
+                x=random.random(),
+                y=random.random(),
+                width=random.random(),
+                height=random.random(),
+            )
 
-        bbox = models.BBox(
-            x=random.random(),
-            y=random.random(),
-            width=random.random(),
-            height=random.random(),
-        )
+            db.annotation.create_object_detection_annotation(
+                file_id=file.fileId,
+                project_id=file.projectId,
+                label=random.choice(project1_labels),
+                bbox=bbox,
+                created_by=admin_id,
+            )
 
-        db.annotation.create_object_detection_annotation(
+    for file in project2_files:
+        db.annotation.create_classification_annotation(
             file_id=file.fileId,
             project_id=file.projectId,
-            label=random.choice(project1_labels),
-            bbox=bbox,
+            label=random.choice(project2_labels),
             created_by=admin_id,
         )
 
-    db.export.export_coco(project1_id)
+    db.export.export_project(project1_id, models.ExportFormat.COCO)
+    db.export.export_project(project2_id, models.ExportFormat.CLASSIFICATION)
 
 
 if __name__ == "__main__":

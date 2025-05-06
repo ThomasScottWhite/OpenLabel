@@ -1,10 +1,12 @@
+import abc
 import datetime
 import json
 import zipfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from bson.objectid import ObjectId
+from pymongo.database import Database
 
 from .. import exceptions as exc
 from .. import models
@@ -14,146 +16,197 @@ from .db_manager import MongoDBManager
 from .file_manager import FileManager
 
 
-class ExportManager:
-    """Export functionality for OpenLabel"""
+class _Exporter(abc.ABC):
 
     def __init__(
         self,
-        db_manager: MongoDBManager,
+        db: Database,
         file_manager: FileManager,
         annotation_manager: AnnotationManager,
     ):
         """Initialize with database manager"""
-        self.db = db_manager.db
+        self.db = db
         self.file_man = file_manager
         self.fs = file_manager.fs
         self.ann_man = annotation_manager
 
-    def export_coco(self, project_id: ObjectId) -> Path:
-        """Export annotations in COCO format"""
+    @abc.abstractmethod
+    def _export(self, project: models.Project, zip_file: zipfile.ZipFile): ...
 
-        # TODO: would probably want to verify that disk has enough space to create dataset
-        # TODO: batching this would also be awesome
+    @property
+    @abc.abstractmethod
+    def export_format(self) -> models.ExportFormat: ...
 
-        project: models.Project = self.db.projects.find_one({"_id": project_id})
+    def export(self, project_id: ObjectId, directory: str | None = None) -> Path:
+        project = self.db.projects.find_one({"_id": project_id})
         if not project:
             raise exc.ResourceNotFound("Project not found")
 
-        # Get all images in project
-        files = self.file_man.get_files_by_project(project_id)
+        project = models.Project.model_validate(project)
 
-        # Get all annotations in project
-        raw_annotations = self.ann_man.get_annotations_by_project(project_id)
+        if directory is None:
+            directory = CONFIG.temp_dir
 
         now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M")
 
-        zip_path = Path(CONFIG.temp_dir) / f"{str(project['_id'])}_COCO_{now_str}.zip"
+        zip_path = (
+            Path(CONFIG.temp_dir)
+            / f"{str(project.projectId)}_{self.export_format.value}_{now_str}.zip"
+        )
         zip_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Format images for COCO
-        image_map: dict[str, tuple[models.FileMeta, int]] = {}
-        coco_images = []
-        image_id = 0
-
-        # TODO: this could probably unironically benefit from the Template pattern
-        # like, have persistent procedure of saving files, annotations, etc.
         try:
-            with zipfile.ZipFile(zip_path, "w") as f:
-                for file in files:
-                    # COCO is for image files only
-                    if file.type != models.DataType.IMAGE:
-                        continue
-
-                    # create COCO image entry
-                    image_map[str(file.fileId)] = (file, image_id)
-                    file_name = f"{str(file.fileId)}{Path(file.filename).suffix}"
-                    coco_images.append(
-                        {
-                            "id": image_id,
-                            "file_name": file_name,
-                            "width": file.width,
-                            "height": file.height,
-                            "date_captured": file.createdAt.isoformat(),
-                        }
-                    )
-                    image_id += 1
-
-                    # Download file
-                    data, _ = self.file_man.download_file(file.fileId)
-
-                    # Write file to zip
-                    f.writestr(file_name, data.getvalue())
-
-                categories = []
-                category_id_map = {}
-
-                # Format annotations for COCO
-                coco_annotations = []
-                ann_id = 0
-                for ann in raw_annotations:
-                    # skip annotations for images not in our image map
-                    if str(ann.fileId) not in image_map:
-                        continue
-
-                    # create a COCO category for the label if one does not exist
-                    if ann.label not in category_id_map:
-                        category_id_map[ann.label] = ann_id
-                        categories.append(dict(id=ann_id, name=ann.label))
-
-                    # create the annotation entry
-                    if ann.type == models.AnnotationType.OBJECT_DETECTION:
-
-                        # convert bounding boxes to COCO format
-                        img, img_id = image_map[str(ann.fileId)]
-                        x = ann.bbox.x * img.width
-                        width = ann.bbox.width * img.width
-                        y = ann.bbox.y * img.height
-                        height = ann.bbox.height * img.height
-
-                        x += width / 2
-                        y += height / 2
-
-                        coco_annotations.append(
-                            dict(
-                                id=ann_id,
-                                image_id=img_id,
-                                category_id=category_id_map[ann.label],
-                                area=width * height,
-                                bbox=list(map(round, (x, y, width, height))),
-                            )
-                        )
-                    else:
-                        raise NotImplementedError(
-                            "COCO export not implemented for specified type!"
-                        )
-
-                    ann_id += 1
-
-                # Construct final COCO format
-                coco_output = {
-                    "info": {
-                        "year": datetime.datetime.now().year,
-                        "version": "1.0",
-                        "description": f"OpenLabel export - {project['name']}",
-                        "contributor": "OpenLabel",
-                        "date_created": datetime.datetime.now().isoformat(),
-                    },
-                    "images": coco_images,
-                    "annotations": coco_annotations,
-                    "categories": categories,
-                }
-
-                f.writestr("manifest.json", json.dumps(coco_output, indent=2))
+            with zipfile.ZipFile(zip_path, "w") as file:
+                self._export(project, file)
         except:
             zip_path.unlink()
             raise
 
         return zip_path
 
+
+class _COCOExporter(_Exporter):
+
+    @property
+    def export_format(self) -> models.ExportFormat:
+        return models.ExportFormat.COCO
+
+    def _export_images(
+        self,
+        zip_file: zipfile.ZipFile,
+        project: models.Project,
+        manifest: dict[str, Any],
+    ) -> dict[str, tuple[models.FileMeta, int]]:
+        files = self.file_man.get_files_by_project(project.projectId)
+
+        image_map: dict[str, tuple[models.FileMeta, int]] = {}
+        coco_images = []
+        image_id = 0
+
+        for f in files:
+            # COCO is for image files only
+            if f.type != models.DataType.IMAGE:
+                continue
+
+            # create COCO image entry
+            image_map[str(f.fileId)] = (f, image_id)
+            file_name = f"{str(f.fileId)}{Path(f.filename).suffix}"
+            coco_images.append(
+                {
+                    "id": image_id,
+                    "file_name": file_name,
+                    "width": f.width,
+                    "height": f.height,
+                    "date_captured": f.createdAt.isoformat(),
+                }
+            )
+            image_id += 1
+
+            # Download file
+            data, _ = self.file_man.download_file(f.fileId)
+
+            # Write file to zip
+            zip_file.writestr(file_name, data.getvalue())
+
+        manifest["images"] = coco_images
+
+        return image_map
+
+    def _export_annotations(
+        self,
+        project: models.Project,
+        image_map: dict[str, tuple[models.FileMeta, int]],
+        manifest: dict[str, Any],
+    ):
+        raw_annotations = self.ann_man.get_annotations_by_project(project.projectId)
+
+        categories = []
+        category_id_map = {}
+
+        # Format annotations for COCO
+        coco_annotations = []
+        ann_id = 0
+        for ann in raw_annotations:
+            # skip annotations for images not in our image map
+            if str(ann.fileId) not in image_map:
+                continue
+
+            # create a COCO category for the label if one does not exist
+            if ann.label not in category_id_map:
+                category_id_map[ann.label] = ann_id
+                categories.append(dict(id=ann_id, name=ann.label))
+
+            # create the annotation entry
+            if ann.type == models.AnnotationType.OBJECT_DETECTION:
+
+                # convert bounding boxes to COCO format
+                img, img_id = image_map[str(ann.fileId)]
+                x = ann.bbox.x * img.width
+                width = ann.bbox.width * img.width
+                y = ann.bbox.y * img.height
+                height = ann.bbox.height * img.height
+
+                x += width / 2
+                y += height / 2
+
+                coco_annotations.append(
+                    dict(
+                        id=ann_id,
+                        image_id=img_id,
+                        category_id=category_id_map[ann.label],
+                        area=width * height,
+                        bbox=list(map(round, (x, y, width, height))),
+                    )
+                )
+            else:
+                raise NotImplementedError(
+                    "COCO export not implemented for specified type!"
+                )
+
+            ann_id += 1
+
+        manifest["annotations"] = coco_annotations
+        manifest["categories"] = categories
+
+    def _export_info(self, project: models.Project, manifest: dict[str, Any]):
+        info = {
+            "year": datetime.datetime.now().year,
+            "version": "1.0",
+            "description": f"OpenLabel export - {project.name}",
+            "contributor": "OpenLabel",
+            "date_created": datetime.datetime.now().isoformat(),
+        }
+
+        manifest["info"] = info
+
+    def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
+        # Get all images in project
+
+        # Get all annotations in project
+
+        # Construct final COCO format
+
+        manifest = {}
+
+        self._export_info(project, manifest)
+        image_map = self._export_images(zip_file, project, manifest)
+        self._export_annotations(project, image_map, manifest)
+
+        zip_file.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+
+class _YOLOExporter(_Exporter):
+
+    @property
+    def export_format(self) -> models.ExportFormat:
+        return models.ExportFormat.YOLO
+
+    # def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
+    #     raise
+
+    # TODO: this is the old YOLO export code; needs to be updated
     def export_yolo(self, project_id: ObjectId) -> Dict[str, List[str]]:
         """Export annotations in YOLO format"""
-
-        # TODO: implemenet this
 
         project = self.db.projects.find_one({"_id": project_id})
         if not project:
@@ -241,3 +294,71 @@ class ExportManager:
         yolo_annotations["classes.txt"] = classes_txt
 
         return yolo_annotations
+
+
+class _ClassificationExporter(_Exporter):
+
+    @property
+    def export_format(self) -> models.ExportFormat:
+        return models.ExportFormat.CLASSIFICATION
+
+    def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
+
+        annotations = self.ann_man.get_annotations_by_project(project.projectId)
+
+        for ann in annotations:
+            if not ann.type == models.AnnotationType.CLASSIFICATION:
+                continue
+
+            data, file = self.file_man.download_file(ann.fileId)
+
+            zip_file.writestr(
+                f"data/{ann.label.strip()}/{file.filename}", data.getvalue()
+            )
+
+
+class ExportManager:
+    """Export functionality for OpenLabel"""
+
+    def __init__(
+        self,
+        db_manager: MongoDBManager,
+        file_manager: FileManager,
+        annotation_manager: AnnotationManager,
+    ):
+        """Initialize with database manager"""
+        self.db = db_manager.db
+        self.file_man = file_manager
+        self.fs = file_manager.fs
+        self.ann_man = annotation_manager
+
+    def export_project(
+        self,
+        project_id: ObjectId,
+        format: models.ExportFormat,
+        export_dir: str | None = None,
+    ) -> Path:
+        """Exports the specified project as the provided format, saving to a ZIP file.
+
+        Args:
+            project_id: The ID of the project to export.
+            format: The format in which to export the project.
+            export_dir: The directory in which to export the project. If None, the default temp_dir from the project
+                configuration will be used. Defaults to None.
+
+        Returns:
+            The Path to the created ZIP file containing the exported data.
+        """
+
+        exporter: _Exporter
+
+        if format == models.ExportFormat.COCO:
+            exporter = _COCOExporter(self.db, self.file_man, self.ann_man)
+        elif format == models.ExportFormat.YOLO:
+            exporter = _YOLOExporter(self.db, self.file_man, self.ann_man)
+        elif format == models.ExportFormat.CLASSIFICATION:
+            exporter = _ClassificationExporter(self.db, self.file_man, self.ann_man)
+        else:
+            raise NotImplementedError("Specified format is not supported!")
+
+        return exporter.export(project_id, export_dir)
