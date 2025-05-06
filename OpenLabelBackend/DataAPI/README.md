@@ -2,6 +2,10 @@
 
 For information on how to run the app, see the [root README](../../README.md).
 
+## API Documentation
+
+With the app running, visit `{API_URL}/docs` for automatically generated API documentation. If you are using the default settings, this link should work: <http://localhost:6969/docs>
+
 ## Technologies
 
 This API runs on Python (developed and tested using version 3.12) and uses [FastAPI](https://fastapi.tiangolo.com/) as its primary API framework/package. For our database, we chose to use [MongoDB](https://www.mongodb.com/) for its flexibility.
