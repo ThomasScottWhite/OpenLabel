@@ -21,7 +21,7 @@ manager.initialize_roles()
 
 file: Final[FileManager] = FileManager(manager)
 annotation: Final[AnnotationManager] = AnnotationManager(manager, file)
-export: Final[ExportManager] = ExportManager(manager)
+export: Final[ExportManager] = ExportManager(manager, file, annotation)
 project: Final[ProjectManager] = ProjectManager(manager)
 user: Final[UserManager] = UserManager(manager)
 

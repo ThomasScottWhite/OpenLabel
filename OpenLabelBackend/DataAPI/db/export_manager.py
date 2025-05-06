@@ -1,120 +1,160 @@
 import datetime
+import json
+import zipfile
+from pathlib import Path
 from typing import Dict, List
 
 from bson.objectid import ObjectId
 
+from .. import exceptions as exc
+from .. import models
+from ..config import CONFIG
+from .annotation_manager import AnnotationManager
 from .db_manager import MongoDBManager
+from .file_manager import FileManager
 
 
 class ExportManager:
     """Export functionality for OpenLabel"""
 
-    def __init__(self, db_manager: MongoDBManager):
+    def __init__(
+        self,
+        db_manager: MongoDBManager,
+        file_manager: FileManager,
+        annotation_manager: AnnotationManager,
+    ):
         """Initialize with database manager"""
         self.db = db_manager.db
+        self.file_man = file_manager
+        self.fs = file_manager.fs
+        self.ann_man = annotation_manager
 
-    def export_coco(self, project_id: ObjectId) -> Dict:
+    def export_coco(self, project_id: ObjectId) -> Path:
         """Export annotations in COCO format"""
-        project = self.db.projects.find_one({"_id": project_id})
+
+        # TODO: would probably want to verify that disk has enough space to create dataset
+        # TODO: batching this would also be awesome
+
+        project: models.Project = self.db.projects.find_one({"_id": project_id})
         if not project:
-            raise ValueError("Project not found")
+            raise exc.ResourceNotFound("Project not found")
 
         # Get all images in project
-        images = list(self.db.images.find({"projectId": project_id}))
+        files = self.file_man.get_files_by_project(project_id)
 
         # Get all annotations in project
-        annotations = list(self.db.annotations.find({"projectId": project_id}))
+        raw_annotations = self.ann_man.get_annotations_by_project(project_id)
 
-        # Get unique labels
-        labels = set()
-        for ann in annotations:
-            labels.add(ann["label"])
+        now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M")
 
-        # Create categories
-        categories = []
-        for i, label in enumerate(sorted(labels)):
-            categories.append({"id": i + 1, "name": label, "supercategory": "none"})
-
-        # Create label to id mapping
-        label_map = {cat["name"]: cat["id"] for cat in categories}
+        zip_path = Path(CONFIG.temp_dir) / f"{str(project['_id'])}_COCO_{now_str}.zip"
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Format images for COCO
+        image_map: dict[str, tuple[models.FileMeta, int]] = {}
         coco_images = []
-        for i, img in enumerate(images):
-            coco_images.append(
-                {
-                    "id": i + 1,
-                    "file_name": img["filename"],
-                    "width": img["width"],
-                    "height": img["height"],
+        image_id = 0
+
+        # TODO: this could probably unironically benefit from the Template pattern
+        # like, have persistent procedure of saving files, annotations, etc.
+        try:
+            with zipfile.ZipFile(zip_path, "w") as f:
+                for file in files:
+                    # COCO is for image files only
+                    if file.type != models.DataType.IMAGE:
+                        continue
+
+                    # create COCO image entry
+                    image_map[str(file.fileId)] = (file, image_id)
+                    file_name = f"{str(file.fileId)}{Path(file.filename).suffix}"
+                    coco_images.append(
+                        {
+                            "id": image_id,
+                            "file_name": file_name,
+                            "width": file.width,
+                            "height": file.height,
+                            "date_captured": file.createdAt.isoformat(),
+                        }
+                    )
+                    image_id += 1
+
+                    # Download file
+                    data, _ = self.file_man.download_file(file.fileId)
+
+                    # Write file to zip
+                    f.writestr(file_name, data.getvalue())
+
+                categories = []
+                category_id_map = {}
+
+                # Format annotations for COCO
+                coco_annotations = []
+                ann_id = 0
+                for ann in raw_annotations:
+                    # skip annotations for images not in our image map
+                    if str(ann.fileId) not in image_map:
+                        continue
+
+                    # create a COCO category for the label if one does not exist
+                    if ann.label not in category_id_map:
+                        category_id_map[ann.label] = ann_id
+                        categories.append(dict(id=ann_id, name=ann.label))
+
+                    # create the annotation entry
+                    if ann.type == models.AnnotationType.OBJECT_DETECTION:
+
+                        # convert bounding boxes to COCO format
+                        img, img_id = image_map[str(ann.fileId)]
+                        x = ann.bbox.x * img.width
+                        width = ann.bbox.width * img.width
+                        y = ann.bbox.y * img.height
+                        height = ann.bbox.height * img.height
+
+                        x += width / 2
+                        y += height / 2
+
+                        coco_annotations.append(
+                            dict(
+                                id=ann_id,
+                                image_id=img_id,
+                                category_id=category_id_map[ann.label],
+                                area=width * height,
+                                bbox=list(map(round, (x, y, width, height))),
+                            )
+                        )
+                    else:
+                        raise NotImplementedError(
+                            "COCO export not implemented for specified type!"
+                        )
+
+                    ann_id += 1
+
+                # Construct final COCO format
+                coco_output = {
+                    "info": {
+                        "year": datetime.datetime.now().year,
+                        "version": "1.0",
+                        "description": f"OpenLabel export - {project['name']}",
+                        "contributor": "OpenLabel",
+                        "date_created": datetime.datetime.now().isoformat(),
+                    },
+                    "images": coco_images,
+                    "annotations": coco_annotations,
+                    "categories": categories,
                 }
-            )
 
-        # Image id mapping for annotations
-        img_id_map = {str(img["_id"]): i + 1 for i, img in enumerate(images)}
+                f.writestr("manifest.json", json.dumps(coco_output, indent=2))
+        except:
+            zip_path.unlink()
+            raise
 
-        # Format annotations for COCO
-        coco_annotations = []
-        for i, ann in enumerate(annotations):
-            if ann["type"] == "boundingBox":
-                x, y = ann["coordinates"]["x"], ann["coordinates"]["y"]
-                w, h = ann["coordinates"]["width"], ann["coordinates"]["height"]
-
-                coco_annotations.append(
-                    {
-                        "id": i + 1,
-                        "image_id": img_id_map[str(ann["fileId"])],
-                        "category_id": label_map[ann["label"]],
-                        "bbox": [x, y, w, h],
-                        "area": w * h,
-                        "segmentation": [],
-                        "iscrowd": 0,
-                    }
-                )
-            elif ann["type"] == "polygon":
-                # Convert points to COCO segmentation format
-                points = ann["coordinates"]["points"]
-                flat_points = []
-                for p in points:
-                    flat_points.extend([p["x"], p["y"]])
-                segmentation = [flat_points]
-
-                # Calculate bounding box from polygon points
-                x_coords = [p["x"] for p in points]
-                y_coords = [p["y"] for p in points]
-                x, y = min(x_coords), min(y_coords)
-                w, h = max(x_coords) - x, max(y_coords) - y
-
-                coco_annotations.append(
-                    {
-                        "id": i + 1,
-                        "image_id": img_id_map[str(ann["fileId"])],
-                        "category_id": label_map[ann["label"]],
-                        "bbox": [x, y, w, h],
-                        "area": w * h,  # Approximate
-                        "segmentation": segmentation,
-                        "iscrowd": 0,
-                    }
-                )
-
-        # Construct final COCO format
-        coco_output = {
-            "info": {
-                "year": datetime.datetime.now().year,
-                "version": "1.0",
-                "description": f"OpenLabel export - {project['name']}",
-                "contributor": "OpenLabel",
-                "date_created": datetime.datetime.now().isoformat(),
-            },
-            "images": coco_images,
-            "annotations": coco_annotations,
-            "categories": categories,
-        }
-
-        return coco_output
+        return zip_path
 
     def export_yolo(self, project_id: ObjectId) -> Dict[str, List[str]]:
         """Export annotations in YOLO format"""
+
+        # TODO: implemenet this
+
         project = self.db.projects.find_one({"_id": project_id})
         if not project:
             raise ValueError("Project not found")

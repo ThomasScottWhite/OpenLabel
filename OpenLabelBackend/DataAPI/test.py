@@ -1,3 +1,4 @@
+import random
 from io import BytesIO
 from pathlib import Path
 
@@ -17,6 +18,7 @@ def init_test_data():
     )
 
     admin_id = auth_utils.decode_token(token).userId
+    project1_labels = ["bird", "cat", "dog", "lynx", "fish"]
 
     project1_id = db.project.create_project(
         name="Default Project 1",
@@ -25,7 +27,7 @@ def init_test_data():
         is_public=True,
         data_type=models.DataType.IMAGE,
         annotation_type=models.AnnotationType.OBJECT_DETECTION,
-        labels=["bird", "cat"],
+        labels=project1_labels,
     )
     project2_id = db.project.create_project(
         name="Default Project 2",
@@ -48,9 +50,9 @@ def init_test_data():
 
     image_folder = Path(__file__).resolve().parents[1] / "test_data"
 
-    project1_files = []
-    project2_files = []
-    project3_files = []
+    project1_files: list[models.FileMeta] = []
+    project2_files: list[models.FileMeta] = []
+    project3_files: list[models.FileMeta] = []
 
     for filename in ("test_image1.png", "test_image2.png"):
         with open(image_folder / filename, "rb") as f:
@@ -89,7 +91,26 @@ def init_test_data():
     print(project2_files)
     print(project3_files)
 
-    # db.annotation.create_bounding_box(project1_imgs[0])
+    for _ in range(200):
+
+        file = random.choice(project1_files)
+
+        bbox = models.BBox(
+            x=random.random(),
+            y=random.random(),
+            width=random.random(),
+            height=random.random(),
+        )
+
+        db.annotation.create_object_detection_annotation(
+            file_id=file.fileId,
+            project_id=file.projectId,
+            label=random.choice(project1_labels),
+            bbox=bbox,
+            created_by=admin_id,
+        )
+
+    db.export.export_coco(project1_id)
 
 
 if __name__ == "__main__":

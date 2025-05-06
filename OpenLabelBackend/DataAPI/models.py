@@ -15,7 +15,6 @@ from pydantic import (
     GetCoreSchemaHandler,
     PlainSerializer,
     computed_field,
-    field_validator,
     model_validator,
 )
 from pydantic_core import core_schema
@@ -58,7 +57,7 @@ class DataType(str, Enum):
 class ExportFormat(str, Enum):
     COCO = "COCO"
     YOLO = "YOLO"
-    ONNX = "ONNX"
+    CLASSIFICATION = "classification"
 
 
 class RoleName(str, Enum):
@@ -161,9 +160,16 @@ class RoleWithID(Role, HasRoleID):
 
 class BBox(BaseModel):
     x: float
+    """The x-coordinate of the top left corner of the bounding box as a proportion of the image width."""
+
     y: float
+    """The y-coordinate of the top left corner of the bounding box as a proportion of the image height."""
+
     width: float
+    """The width of the bounding box as a proportion of the image width."""
+
     height: float
+    """The height of the bounding box as a proportion of the image height."""
 
 
 class Point(BaseModel):

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Final
 
 from DataAPI import db, models
 from DataAPI.auth_utils import auth_user
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from .. import exceptions as exc
 
@@ -68,9 +71,7 @@ def create_project(
 
 
 @router.get("/{project_id}")
-def get_project_by_id(
-    project_id: models.ID
-) -> models.ProjectWithFiles:
+def get_project_by_id(project_id: models.ID) -> models.ProjectWithFiles:
     # TODO: authentication?? should the user have to be part of the project to see it??
     # auth_token: models.TokenPayload = Depends(auth_user)
     project = db.project.get_project_by_id(project_id)
@@ -168,6 +169,7 @@ def get_project_images(
 from io import BytesIO
 from typing import Any
 
+
 @router.post("/{project_id}/files", status_code=status.HTTP_201_CREATED)
 async def upload_images_to_project(
     project_id: models.ID,
@@ -193,3 +195,49 @@ async def upload_images_to_project(
         )
 
     return db.file.upload_files(prepared_files)
+
+
+@router.get("/{project_id}/export")
+def get_project_images(
+    project_id: models.ID,
+    # auth_token: models.TokenPayload = Depends(auth_user),
+    format: models.ExportFormat | None = None,
+) -> FileResponse:
+    # TODO: do auth
+
+    if format is None:
+        project = db.project.get_project_by_id(project_id)
+        if not project:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found.")
+
+        if project.settings.dataType == models.DataType.IMAGE:
+            format = models.ExportFormat.COCO
+        elif project.settings.dataType == models.DataType.TEXT:
+            format = models.ExportFormat.CLASSIFICATION
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Could not infer default export format for project.",
+            )
+
+    zip_path: Path | None = None
+
+    try:
+        if format == models.ExportFormat.COCO:
+            zip_path = db.export.export_coco(project_id)
+    except exc.ResourceNotFound as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+    except NotImplementedError as e:
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(e))
+
+    if zip_path is None:
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED, "Provided format not implemented."
+        )
+
+    return FileResponse(
+        path=zip_path,
+        media_type="application/zip",
+        filename=zip_path.name,
+        background=BackgroundTask(zip_path.unlink),
+    )
