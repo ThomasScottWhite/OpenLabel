@@ -1,10 +1,15 @@
 import abc
 import datetime
+import io
 import json
+import logging
+import math
+import random
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Literal
 
+import yaml
 from bson.objectid import ObjectId
 from pymongo.database import Database
 
@@ -14,6 +19,8 @@ from ..config import CONFIG
 from .annotation_manager import AnnotationManager
 from .db_manager import MongoDBManager
 from .file_manager import FileManager
+
+logger = logging.getLogger(__name__)
 
 
 class _ExportStrategy(abc.ABC):
@@ -39,12 +46,19 @@ class _ExportStrategy(abc.ABC):
     @abc.abstractmethod
     def export_format(self) -> models.ExportFormat: ...
 
-    def export(self, project_id: ObjectId, directory: str | None = None) -> Path:
+    def export(
+        self,
+        project_id: ObjectId,
+        directory: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> Path:
         """Exports the specified project as a ZIP file, saving it to `directory`.
 
         Args:
             project_id: The ID of the project to export.
             directory: The directory to save the resultant ZIP file. If None, defaults to CONFIG.temp_dir.
+                Defaults to None.
+            options: Any additional options to pass to the exporter. If None, no options are passed.
                 Defaults to None.
 
         Raises:
@@ -74,7 +88,7 @@ class _ExportStrategy(abc.ABC):
         # wrap in try block to delete created file upon error
         try:
             with zipfile.ZipFile(zip_path, "w") as file:
-                self._export(project, file)
+                self._export(project, file, **options)
         except:
             zip_path.unlink(missing_ok=True)
             raise
@@ -245,105 +259,188 @@ class _COCOExporter(_ExportStrategy):
         zip_file.writestr("manifest.json", json.dumps(manifest, indent=2))
 
 
+_YOLO_DATA_SUBDIR = Literal["train", "val"]
+
+
 class _YOLOExporter(_ExportStrategy):
+    """Exoprts in the YOLO format:
+
+    /
+      data.yaml
+      images/
+        train/
+          img1.ext
+          img2.ext
+          ...
+        val/
+          img3.ext
+          ...
+      labels/
+        train/
+          img1.txt
+          img2.txt
+          ...
+        val/
+          img3.txt
+          ...
+
+    See more: https://docs.ultralytics.com/datasets/detect/
+    """
 
     @property
     def export_format(self) -> models.ExportFormat:
         return models.ExportFormat.YOLO
 
-    # def _export(self, project: models.Project, zip_file: zipfile.ZipFile):
-    #     raise
+    def _export_images(
+        self,
+        project: models.Project,
+        zip_file: zipfile.ZipFile,
+        validation_ratio: float,
+    ) -> dict[str, _YOLO_DATA_SUBDIR]:
+        """Exports the project's images to the provided ZIP file.
 
-    # TODO: this is the old YOLO export code; needs to be updated
-    def export_yolo(self, project_id: ObjectId) -> Dict[str, List[str]]:
-        """Export annotations in YOLO format"""
+        Args:
+            project: The project to export.
+            zip_file: The ZipFile to save data to.
+            validation_ratio: The percentage of the dataset to use as validation data.
 
-        project = self.db.projects.find_one({"_id": project_id})
-        if not project:
-            raise ValueError("Project not found")
+        Returns:
+            A mapping from FileID (as str) to its subdirectory.
+        """
 
-        # Get all images in project
-        images = list(self.db.images.find({"projectId": project_id}))
+        files = self.file_man.get_files_by_project(project.projectId)
 
-        # Create a map of image ID to image data
-        image_map = {str(img["_id"]): img for img in images}
+        # shuffle files so sampling is random
+        random.shuffle(files)
 
-        # Get unique labels across all annotations
-        all_annotations = list(self.db.annotations.find({"projectId": project_id}))
-        labels = sorted(set(ann["label"] for ann in all_annotations))
+        val_count = math.ceil(validation_ratio * len(files))
 
-        # Create label to index mapping (YOLO uses numeric class indices)
-        label_map = {label: i for i, label in enumerate(labels)}
+        # zip data with the subirectory they'll be associated with
+        chunks = zip(("train", "val"), (files[val_count:], files[:val_count]))
 
-        # Generate YOLO annotations by image
-        yolo_annotations = {}
+        image_map: dict[str, _YOLO_DATA_SUBDIR] = {}
 
-        for image_id, image in image_map.items():
-            # Get annotations for this image
-            image_annotations = [
-                a for a in all_annotations if str(a["fileId"]) == image_id
-            ]
-
-            # Format annotations for YOLO
-            yolo_lines = []
-
-            for ann in image_annotations:
-                if ann["type"] == "boundingBox":
-                    # YOLO format: <class_id> <center_x> <center_y> <width> <height>
-                    # All values are normalized to [0, 1]
-                    x = ann["coordinates"]["x"]
-                    y = ann["coordinates"]["y"]
-                    w = ann["coordinates"]["width"]
-                    h = ann["coordinates"]["height"]
-
-                    # Calculate center points and normalize
-                    center_x = (x + w / 2) / image["width"]
-                    center_y = (y + h / 2) / image["height"]
-                    norm_width = w / image["width"]
-                    norm_height = h / image["height"]
-
-                    class_id = label_map[ann["label"]]
-
-                    yolo_lines.append(
-                        f"{class_id} {center_x:.6f} {center_y:.6f} {norm_width:.6f} {norm_height:.6f}"
+        for subdir, file_subset in chunks:
+            for file in file_subset:
+                id_str = str(file.fileId)
+                if file.type != models.DataType.IMAGE:
+                    logger.warning(
+                        f"Skipping file {id_str} in {self.export_format.value} export because it is not an image!"
                     )
+                    continue
 
-                elif ann["type"] == "polygon":
-                    # YOLO v5+ supports polygons using a different format
-                    # For simplicity, we'll convert polygon to bounding box for basic YOLO format
-                    points = ann["coordinates"]["points"]
-                    x_coords = [p["x"] for p in points]
-                    y_coords = [p["y"] for p in points]
+                image_map[id_str] = subdir
+                file_name = f"{id_str}{Path(file.filename).suffix}"
 
-                    # Calculate bounding box
-                    x = min(x_coords)
-                    y = min(y_coords)
-                    w = max(x_coords) - x
-                    h = max(y_coords) - y
+                data, _ = self.file_man.download_file(file.fileId)
 
-                    # Calculate center points and normalize
-                    center_x = (x + w / 2) / image["width"]
-                    center_y = (y + h / 2) / image["height"]
-                    norm_width = w / image["width"]
-                    norm_height = h / image["height"]
+                zip_file.writestr(f"images/{subdir}/{file_name}", data.getvalue())
 
-                    class_id = label_map[ann["label"]]
+        return image_map
 
-                    yolo_lines.append(
-                        f"{class_id} {center_x:.6f} {center_y:.6f} {norm_width:.6f} {norm_height:.6f}"
-                    )
+    def _collect_annotations(
+        self,
+        project: models.Project,
+    ) -> tuple[dict[str, list[str]], dict[int, str]]:
+        """Collects and formats annotations for YOLO annotation export.
 
-            # Store annotations for this image
-            if yolo_lines:
-                yolo_annotations[image["filename"]] = yolo_lines
+        Args:
+            project: The project to collect annotations from.
 
-        # Generate a classes.txt file
-        classes_txt = [f"{label}\n" for label in labels]
+        Returns:
+            A pair where the first element is a mapping from FileID (as str) to a list of YOLO-formatted annotations
+                and the second element maps annotation class ID to its string name.
+        """
+        annotations = self.ann_man.get_annotations_by_project(project.projectId)
 
-        # Include the classes file in the result
-        yolo_annotations["classes.txt"] = classes_txt
+        formatted_annotations: dict[str, list[str]] = {}
 
-        return yolo_annotations
+        ann_id = 0
+        name_mapping: dict[str, int] = {}
+        for ann in annotations:
+            # create new YOLO annotation name
+            if ann.label not in name_mapping:
+                name_mapping[ann.label] = ann_id
+                ann_id += 1
+
+            # create the annotation entry
+            if ann.type == models.AnnotationType.OBJECT_DETECTION:
+
+                # our annotations are stored in the format YOLO likes, so just convert to str
+                bbox = ann.bbox
+                yolo_annotation = f"{name_mapping[ann.label]} {bbox.x} {bbox.y} {bbox.width} {bbox.height}"
+
+                file_id_str = str(ann.fileId)
+                if file_id_str not in formatted_annotations:
+                    formatted_annotations[file_id_str] = [yolo_annotation]
+                else:
+                    formatted_annotations[file_id_str].append(yolo_annotation)
+            else:
+                logger.warning(
+                    f"YOLO export not supported for annotation type {ann.type.value}"
+                )
+
+        # reverse the keys/values of name_mapping to match expected output
+        return formatted_annotations, {id_: name for name, id_ in name_mapping.items()}
+
+    def _save_annotations(
+        self,
+        zip_file: zipfile.ZipFile,
+        annotations: dict[str, list[str]],
+        image_dirs: dict[str, _YOLO_DATA_SUBDIR],
+    ):
+        """Saves the provided annotations to the provided ZIP file.
+
+        Args:
+            zip_file: The file to save the YOLO annotations to.
+            annotations: A mapping from FileIds (as str) to their corresponding YOLO-formatted annotations.
+                Essentially expects the annotations output from self._collect_annotations.
+            image_dirs: A mapping from FileIds (as str) to the subdirectory they were stored under.
+                Essentially expects the output of self._export_images.
+        """
+
+        for file_id, ann in annotations.items():
+            if file_id not in image_dirs:
+                logger.warning(f"File {file_id} not found in image map; skipping...")
+                continue
+
+            file_name = f"{file_id}.txt"
+            content = "\n".join(ann)
+
+            zip_file.writestr(f"labels/{image_dirs[file_id]}/{file_name}", content)
+
+    def _export(
+        self,
+        project: models.Project,
+        zip_file: zipfile.ZipFile,
+        validation_ratio: float = 0.1,
+    ):
+        """Exports a project in YOLO format.
+
+        Args:
+            project: The project to export.
+            zip_file: The ZIP file to export the project to.
+            validation_ratio: The percentage of data to use as validation data. Must be in [0, 1]. Defaults to 0.1.
+
+        Raises:
+            ValueError: If validation_ratio is not in the interval [0, 1].
+        """
+        if not 0.0 <= validation_ratio <= 1.0:
+            raise ValueError("Validation ration must be between 0 and 1.")
+
+        manifest = dict(path=".", train="images/train", val="images/val")
+
+        image_dirs = self._export_images(project, zip_file, validation_ratio)
+        annotations, name_map = self._collect_annotations(project)
+        self._save_annotations(zip_file, annotations, image_dirs)
+
+        manifest["names"] = name_map
+
+        # yaml library does not have a dumps function, so have to dump to buffer manually instead
+        yaml_buffer = io.StringIO()
+        yaml.dump(manifest, yaml_buffer)
+
+        zip_file.writestr("data.yaml", yaml_buffer.getvalue())
 
 
 class _ClassificationExporter(_ExportStrategy):
@@ -398,6 +495,7 @@ class ExportManager:
         project_id: ObjectId,
         format: models.ExportFormat,
         export_dir: str | None = None,
+        export_options: dict[str, Any] | None = None,
     ) -> Path:
         """Exports the specified project as the provided format, saving to a ZIP file.
 
@@ -406,12 +504,17 @@ class ExportManager:
             format: The format in which to export the project.
             export_dir: The directory in which to export the project. If None, the default temp_dir from the project
                 configuration will be used. Defaults to None.
+            export_options: Any additional options to pass to the exporter. If None, no options are passed.
+                Defaults to None.
 
         Returns:
             The Path to the created ZIP file containing the exported data.
         """
 
         exporter: _ExportStrategy
+
+        if export_options is None:
+            export_options = {}
 
         if format == models.ExportFormat.COCO:
             exporter = _COCOExporter(self.db, self.file_man, self.ann_man)
@@ -422,4 +525,4 @@ class ExportManager:
         else:
             raise NotImplementedError("Specified format is not supported!")
 
-        return exporter.export(project_id, export_dir)
+        return exporter.export(project_id, export_dir, export_options)
