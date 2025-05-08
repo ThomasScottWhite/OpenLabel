@@ -6,8 +6,7 @@ from typing import Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import exceptions as exc
 from .. import models

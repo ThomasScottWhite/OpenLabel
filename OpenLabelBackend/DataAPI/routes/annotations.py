@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import base64
 import logging
 from typing import Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 
 from .. import exceptions as exc
 from .. import models
