@@ -141,6 +141,19 @@ def create_file_annotation(
     annotation: models.CreateAnnotation,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> models.HasAnnotationID:
+    """Creates an annotation for a file.
+
+    Args:
+        file_id: The file for which to create the annotation.
+        annotation: The annotation data.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified file does not exist.
+
+    Returns:
+        The ID of the created annotation.
+    """
     # TODO: auth?
 
     file_meta = db.file.get_file_by_id(file_id)
