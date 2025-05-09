@@ -145,7 +145,7 @@ Interaction with the database is divided into _managers_. This division modulari
 
 One specified design pattern we used was the Strategy Pattern, which was used for exports. Essentially, we have an abstract base class, `_ExportStrategy` which specifies a private method (`_export`) for subclasses to override to provide functionality and a public wrapper method (`export`) that calles `_export` and handles some common operations done by all child strategies, such as fetching project details, initializing the ZIP file, and cleaning up created files in the case of an error.
 
-To increase readability, some strategy implementation divide exports into more individual steps, but these steps are unique to each strategy.
+To increase readability, some strategy implementation divide exports into more individual steps, but these steps are unique to each strategy. If a common pattern would arise, transitioning to a Template pattern would be better.
 
 ## File Structure
 
