@@ -2,8 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./app.css";
 
-import Home from "./Home.tsx"; // A sample home page
-import NotFound from "./NotFound.tsx"; // A 404 Not Found page
+import Home from "./Home.tsx";
+import NotFound from "./NotFound.tsx";
 import Login from "./Login.tsx";
 import Projects from "./Projects.tsx";
 import ProjectPage from "./ProjectPage.tsx";

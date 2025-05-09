@@ -12,6 +12,10 @@ import { useState } from "react";
 import { Table, Form, InputGroup } from "react-bootstrap";
 import { BsChevronDown, BsChevronUp } from "react-icons/bs";
 
+// This component was mostly copied from the TanStack Table documentation
+// https://tanstack.com/table/v8/docs/examples/react-table
+// and modified to fit the needs of the OpenLabel project.
+
 type FileItem = {
   fileId: string;
   projectId: string;

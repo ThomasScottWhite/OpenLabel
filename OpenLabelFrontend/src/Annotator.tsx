@@ -35,7 +35,7 @@ export interface ProjectFile {
 }
 
 export interface ProjectFileWithData extends ProjectFile {
-  data: string; // base64 for images, raw string for text
+  data: string; // images are base64 encoded strings, text is plain text
   annotations?: Annotation[];
 }
 
@@ -61,6 +61,14 @@ export type Annotation = ClassificationAnnotation | ObjectDetectionAnnotation;
 const CANVAS_HEIGHT = 600;
 
 const Annotator = () => {
+  // We create a bunch of lists that are the length of the number of files
+  // This is to easily keep track of the annotations and labels for each file
+
+  // One major improvement is to cashe the file data and annotations before the user needs.
+
+  // I added a bunch of comments to explain what each part of the code does
+  // This code is honestly way to difficult to read, but react makes it hard to improve
+
   const { id } = useParams<{ id: string }>();
   const [layout, setLayout] = useState<AnnotatorLayout | null>(null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
@@ -400,6 +408,8 @@ const Annotator = () => {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       // Ignore keyboard shortcuts when typing in input fields
+      // This really isnt needed currently, but could be useful
+      // You know what they say, copilot is right twice a day
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement
