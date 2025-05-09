@@ -1,4 +1,3 @@
-// ObjectDetectionAnnotator.tsx
 import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
@@ -24,6 +23,9 @@ interface Props {
 
 const HANDLE_SIZE = 8;
 
+// This annotator is really complicated
+// This could use more comments
+// Or also a complete rewrite
 const ObjectDetectionAnnotator = ({
   image,
   width,
@@ -82,18 +84,18 @@ const ObjectDetectionAnnotator = ({
     };
     ctx.drawImage(image, offsetX, offsetY, imgW, imgH);
 
-    // Draw the currently drawing box (preview)
+    // Draw the currently drawing box
     if (currentDrawingBox && mode === "drawing") {
       ctx.strokeStyle = "cyan";
       ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]); // Dashed line for preview
+      ctx.setLineDash([5, 5]);
       ctx.strokeRect(
         currentDrawingBox.x,
         currentDrawingBox.y,
         currentDrawingBox.w,
         currentDrawingBox.h
       );
-      ctx.setLineDash([]); // Reset to solid lines for other boxes
+      ctx.setLineDash([]);
     }
 
     for (const box of annotations) {
@@ -112,7 +114,6 @@ const ObjectDetectionAnnotator = ({
       ctx.font = "14px sans-serif";
       ctx.fillText(box.label, absX + 5, absY - 6);
 
-      // Draw handles
       drawHandle(ctx, absX, absY);
       drawHandle(ctx, absX + absW, absY);
       drawHandle(ctx, absX, absY + absH);
@@ -300,15 +301,12 @@ const ObjectDetectionAnnotator = ({
       );
     }
 
-    // Add preview for drawing mode
     if (mode === "drawing" && startPoint.current) {
-      // Calculate the coordinates for the preview box
       const x = Math.min(startPoint.current.x, pos.x);
       const y = Math.min(startPoint.current.y, pos.y);
       const w = Math.abs(pos.x - startPoint.current.x);
       const h = Math.abs(pos.y - startPoint.current.y);
 
-      // Update the current drawing box
       setCurrentDrawingBox({ x, y, w, h });
     }
   };
