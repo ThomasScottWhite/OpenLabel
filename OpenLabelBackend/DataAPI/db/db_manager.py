@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
-import os
+from typing import Any
 
 import pymongo
-from DataAPI.models import CRUD, Permission, Role, RoleName
+from bson.objectid import ObjectId
+from DataAPI.models import CRUD, BaseRole, Permission, Role, RoleName
 from pymongo import MongoClient
 
+logger = logging.getLogger(__name__)
+
 ROLES = [
-    Role(
-        name="admin",
+    BaseRole(
+        name=RoleName.ADMIN,
         permissions=[
             Permission(
                 resource="users",
@@ -26,8 +29,8 @@ ROLES = [
         ],
         description="Administrator with full access",
     ),
-    Role(
-        name="project_manager",
+    BaseRole(
+        name=RoleName.PROJECT_MANAGER,
         permissions=[
             Permission(resource="users", actions=[CRUD.READ]),
             Permission(
@@ -40,8 +43,8 @@ ROLES = [
         ],
         description="Project manager with project creation and management capabilities",
     ),
-    Role(
-        name="annotator",
+    BaseRole(
+        name=RoleName.ANNOTATOR,
         permissions=[
             Permission(resource="projects", actions=[CRUD.READ]),
             Permission(
@@ -51,8 +54,8 @@ ROLES = [
         ],
         description="Annotator with annotation capabilities",
     ),
-    Role(
-        name="reviewer",
+    BaseRole(
+        name=RoleName.REVIEWER,
         permissions=[
             Permission(resource="projects", actions=[CRUD.READ]),
             Permission(
@@ -75,9 +78,9 @@ class MongoDBManager:
             self.db = self.client[database_name]
             # Create indexes for collections
             self._create_indexes()
-            logging.info("MongoDB connection established successfully")
+            logger.info("MongoDB connection established successfully")
         except Exception as e:
-            logging.error(f"MongoDB connection failed: {str(e)}")
+            logger.exception(f"MongoDB connection failed: {str(e)}")
             raise
 
     def _create_indexes(self):
@@ -115,3 +118,44 @@ class MongoDBManager:
                 # the mode="json" ensures the Action enums are converted to normal strings
                 self.db.roles.insert_one(role.model_dump(mode="json"))
                 print(f"Created role: {role.name}")
+
+    def get_roles(self) -> list[Role]:
+        """Returns all initiatlized roles."""
+
+        roles = self.db.roles.find({})
+
+        return [Role.model_validate(role) for role in roles]
+
+    @staticmethod
+    def _convert_to_role_model(raw_role: dict[str, Any] | None) -> Role | None:
+        """Converts a raw role result taken from the db.roles collection into the Role
+        pydantic model, or None, if the input role was None.
+
+        Args:
+            raw_role: A single document from the db.roles collection.
+
+        Returns:
+            The converted role, or None if that was the input.
+        """
+        if raw_role is None:
+            return None
+
+        return Role.model_validate(raw_role)
+
+    def get_role_by_id(self, role_id: ObjectId) -> Role | None:
+        """Returns a single Role by its ID, or None if the role does not exist.
+
+        Args:
+            role_id: The ID of the role to fetch.
+        """
+        role = self.db.roles.find_one({"_id": role_id})
+        return self._convert_to_role_model(role)
+
+    def get_role_by_name(self, role_name: RoleName) -> Role | None:
+        """Returns a single Role by its name, or None if the role does not exist.
+
+        Args:
+            role_id: The ID of the role to fetch.
+        """
+        role = self.db.roles.find_one({"name": role_name})
+        return self._convert_to_role_model(role)

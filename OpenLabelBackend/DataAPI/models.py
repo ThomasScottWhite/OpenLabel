@@ -145,14 +145,14 @@ class Permission(BaseModel):
     actions: list[CRUD]
 
 
-class Role(BaseModel):
-    name: str
+class BaseRole(BaseModel):
+    name: RoleName
     permissions: list[Permission]
     description: str
 
 
-class RoleWithID(Role, HasRoleID):
-    pass
+class Role(BaseRole, HasRoleID):
+    roleId: ID = Field(validation_alias=AliasChoices("_id", "roleId"))
 
 
 # ANNOTATIONS
@@ -380,7 +380,7 @@ class ProjectMember(HasUserID, HasRoleID, HasJoinedAt):
 
 class ProjectMemberDetails(HasJoinedAt):
     user: UserNoPasswordWithID
-    role: RoleWithID
+    role: Role
 
 
 class ProjectSettings(BaseModel):
@@ -392,12 +392,15 @@ class ProjectSettings(BaseModel):
     labels: list[str] = Field([])
 
 
-class Project(HasCreatedBy, HasCreatedAt, HasUpdatedAt, HasProjectID):
-    projectId: ID = Field(validation_alias=AliasChoices("_id", "projectId"))
+class BaseProject(HasCreatedBy, HasCreatedAt, HasUpdatedAt):
     name: str
     description: str
     settings: ProjectSettings
     members: list[ProjectMember]
+
+
+class Project(BaseProject, HasProjectID):
+    projectId: ID = Field(validation_alias=AliasChoices("_id", "projectId"))
 
 
 class ProjectWithFiles(Project):

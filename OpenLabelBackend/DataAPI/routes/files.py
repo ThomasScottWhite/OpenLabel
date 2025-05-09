@@ -6,8 +6,7 @@ from typing import Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import exceptions as exc
 from .. import models
@@ -119,6 +118,17 @@ def get_file_annotations(
     limit: int = 0,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.Annotation]:
+    """Returns a list of a file's annotations.
+
+    Args:
+        file_id: The ID of the file for which to fetch anotations.
+        limit: The maximum number of annotations to fetch. If 0, the limit is unset.
+            Defaults to 0.
+        auth_token: Auth token taken from the Authorization header.
+
+    Returns:
+        A list of annotations for the file
+    """
     # TODO: auth?
 
     return db.annotation.get_annotations_by_file(file_id, limit)
@@ -130,6 +140,19 @@ def create_file_annotation(
     annotation: models.CreateAnnotation,
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> models.HasAnnotationID:
+    """Creates an annotation for a file.
+
+    Args:
+        file_id: The file for which to create the annotation.
+        annotation: The annotation data.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified file does not exist.
+
+    Returns:
+        The ID of the created annotation.
+    """
     # TODO: auth?
 
     file_meta = db.file.get_file_by_id(file_id)

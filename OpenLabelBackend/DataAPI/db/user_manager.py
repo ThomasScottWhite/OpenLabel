@@ -14,12 +14,6 @@ from ..exceptions import (
 )
 from .db_manager import MongoDBManager
 
-DEFAULT_ADMIN = {
-    "username": "admin",
-    "email": "admin@admin.com",
-    "password": "admin",
-}
-
 
 class UserManager:
     """User management for OpenLabel"""
@@ -34,6 +28,7 @@ class UserManager:
         Args:
             role_name: The name of the role for which to fetch the ID.
         """
+        # TODO: replace with new role tech when its created
         role = self.db.roles.find_one({"name": role_name})
         if not role:
             return None
@@ -277,16 +272,3 @@ class UserManager:
 
         result = self.db.userPreferences.update_one({"userId": user_id}, {"$set": old})
         return result.modified_count > 0
-
-    def initalize_default_admin_user(self):
-        """Creates a default admin user if it does not exist"""
-        existing_user = self.db.users.find_one({"username": "admin"})
-        if not existing_user:
-            self.create_user(
-                DEFAULT_ADMIN["username"],
-                DEFAULT_ADMIN["email"],
-                DEFAULT_ADMIN["password"],
-                "Admin",
-                "User",
-                role_name="admin",
-            )

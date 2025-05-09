@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import base64
 import logging
 from typing import Final
 
 from DataAPI import db
 from DataAPI.auth_utils import auth_user
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 
 from .. import exceptions as exc
 from .. import models
@@ -80,6 +78,14 @@ def update_annotation(
     update_data: models.UpdateAnnotation,
     auth_token: models.TokenPayload = Depends(auth_user),
 ):
+    """Updates a single annotation.
+
+    Args:
+        annotation_id: The ID of the annotation to update.
+        update_data: A mapping of partial updates to the annotation. If an invalid configuration is presented,
+            a 422 error will be raised (e.g., you can't have a bbox and polygon at the same time).
+        auth_token: Auth token taken from the Authorization header.
+    """
     # TODO: auth (may have to dig into project roles, etc.)
 
     db.annotation.update_annotation(annotation_id, update_data)

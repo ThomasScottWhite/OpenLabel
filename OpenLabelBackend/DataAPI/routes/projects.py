@@ -26,6 +26,11 @@ router = APIRouter(prefix=f"/{_section_name}", tags=[_section_name])
 def get_projects(
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.Project]:
+    """Returns all projects.
+
+    Args:
+        auth_token: Auth token taken from the Authorization header.
+    """
     # TODO: auth here? idk if it needs it
     return db.project.get_all_projects()
 
@@ -71,9 +76,19 @@ def create_project(
 
 
 @router.get("/{project_id}")
-def get_project_by_id(project_id: models.ID) -> models.ProjectWithFiles:
+def get_project_by_id(
+    project_id: models.ID, auth_token: models.TokenPayload = Depends(auth_user)
+) -> models.ProjectWithFiles:
+    """Returns a single project by its ID, including its files and annotations.
+
+    Args:
+        project_id: The ID of the project to fetch.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the project does not exist.
+    """
     # TODO: authentication?? should the user have to be part of the project to see it??
-    # auth_token: models.TokenPayload = Depends(auth_user)
     project = db.project.get_project_by_id(project_id)
 
     if project is None:
@@ -102,12 +117,23 @@ def update_project_by_id(
     data: dict,
     auth_token: models.TokenPayload = Depends(auth_user),
 ):
+    """Partially updates a project by ID.
+
+    Args:
+        project_id: The ID of the project to update.
+        data: A partial update mapping that maps keys to their new values.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 422; if the update is invalid.
+        HTTPException: 404; if the specified project does not exist.
+    """
     # TODO: auth is in the function for this one
 
     try:
         db.project.update_project(project_id, data, auth_token.userId)
     except (exc.ResourceNotFound, exc.InvalidPatchMap, exc.ProjectNameExists) as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
     except exc.PermissionError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
 
@@ -123,14 +149,26 @@ def add_member_to_project(
     request: CreateProjectMemberRequest,
     auth_token: models.TokenPayload = Depends(auth_user),
 ):
+    """Adds a member to a project.
+
+    Args:
+        project_id: The ID of the project to which to add the new member.
+        request: The new member information.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 422; if the specified user is already a member.
+        HTTPException: 403; if the requesting user does not have permission to add a member.
+        HTTPException: 404; if the provided project does not exist.
+    """
     # TODO: auth is in the function for this one
 
     try:
         db.project.add_project_member(
             project_id, request.user_id, request.role_name, auth_token.userId
         )
-    except (exc.InvalidPatchMap, exc.UserAlreadyExists) as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except exc.UserAlreadyExists as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
     except exc.PermissionError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
     except exc.ResourceNotFound as e:
@@ -141,12 +179,22 @@ def add_member_to_project(
 def get_project_members(
     project_id: models.ID, auth_token: models.TokenPayload = Depends(auth_user)
 ) -> list[models.ProjectMemberDetails]:
+    """Returns a detailed list of project members for a single project.
+
+    Args:
+        project_id: The ID of the project to fetch.
+        auth_token: Auth token taken from the Authorization header.
+
+    Raises:
+        HTTPException: 404; if the specified project does not exist.
+
+    Returns:
+        _description_
+    """
     # TODO: do auth
 
     try:
         members = db.project.get_project_members(project_id)
-        for member in members:
-            member["role"]["roleId"] = member["role"].pop("_id")
 
         return members
     except exc.ResourceNotFound as e:
@@ -159,6 +207,17 @@ def get_project_images(
     auth_token: models.TokenPayload = Depends(auth_user),
     limit: int = 0,
 ) -> list[models.FileMeta]:
+    """Returns a list of the file meta for all files in a project.
+
+    Args:
+        project_id: The project for which to fetch files.
+        auth_token: Auth token taken from the Authorization header.
+        limit: The maximum number of images to return. If 0, the limit is unset.
+            Defaults to 0.
+
+    Raises:
+        HTTPException: 404; if the project does not exist.
+    """
     # TODO: do auth
     try:
         return db.file.get_files_by_project(project_id, limit)
@@ -166,16 +225,22 @@ def get_project_images(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
 
 
-from io import BytesIO
-from typing import Any
-
-
 @router.post("/{project_id}/files", status_code=status.HTTP_201_CREATED)
-async def upload_images_to_project(
+async def upload_files_to_project(
     project_id: models.ID,
     files: list[UploadFile],
     auth_token: models.TokenPayload = Depends(auth_user),
 ) -> list[models.FileMeta]:
+    """Uploads one or more files to a project.
+
+    Args:
+        project_id: The project to upload the files to.
+        files: The files to upload.
+        auth_token: Auth token taken from the Authorization header.
+
+    Returns:
+        A list of the generated file meta objects from the uploaded files.
+    """
     # TODO: do auth
 
     prepared_files: list[dict[str, Any]] = []
@@ -203,20 +268,36 @@ def get_project_images(
     auth_token: models.TokenPayload = Depends(auth_user),
     format: models.ExportFormat | None = None,
 ) -> FileResponse:
+    """Exports a project's data (annotations and files) to a ZIP corresponding
+    to the specified format.
+
+    Args:
+        project_id: The ID of the project to export.
+        auth_token: Auth token taken from the Authorization header.
+        format: The format to export the project in. If None, the format is inferred based
+            on project data type. Defaults to None.
+
+    Raises:
+        HTTPException: 404; if the project does not exist
+        HTTPException: 422; if the format is None and an export type cannot be inferred.
+        HTTPException: 501; if a format is not implemented yet.
+
+    Returns:
+        The ZIP file containing the exported data.
+    """
     # TODO: do auth
+    project = db.project.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found.")
 
     if format is None:
-        project = db.project.get_project_by_id(project_id)
-        if not project:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found.")
-
         if project.settings.dataType == models.DataType.IMAGE:
             format = models.ExportFormat.COCO
         elif project.settings.dataType == models.DataType.TEXT:
             format = models.ExportFormat.CLASSIFICATION
         else:
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "Could not infer default export format for project.",
             )
 
