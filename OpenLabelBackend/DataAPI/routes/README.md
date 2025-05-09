@@ -4,6 +4,8 @@ This folder contains the code for all app routes. Routes should be categorized b
 
 Routers are automatically loaded and imported via the `__init__.py` file. Using `from DataAPI.routes import ROUTERS` will gives a list, `ROUTERS`, of all routers defined in this directory. To conform to this automatic loading, you must create new routes files as defined in [Creating New Routes](#creating-new-routes).
 
+This automatic loading of routes allows new routes to be created by only creating a single file. Additionaly, routes can still be imported manually, if desired; this automatic loading does not interfere with that.
+
 ## Creating New Routes
 
 If your new desired routes fits within an existing category, add it there; otherwise, create a new route file.
@@ -40,3 +42,7 @@ If your new desired routes fits within an existing category, add it there; other
    - the goal of this behavior is to divide routes into sensible categories, akin to folders and subfolders in a filesystem
 
 After following these steps, your routes will automatically be imported; you do not need to modify any other file for your routes to be added to the application.
+
+## Bypass Automatic Loading
+
+By default, any files starting with an underscore will be ignored by the automatic loading procedure.
